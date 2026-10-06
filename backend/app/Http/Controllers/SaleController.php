@@ -1,0 +1,194 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Support\Catalogos;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+
+class SaleController extends ApiController
+{
+    public function index(Request $request): JsonResponse
+    {
+        $this->requireAnyPermission($request, ['VENTAS.REGISTRAR', 'PAGOS.REGISTRAR', 'REPORTES.CONSULTAR']);
+        $query = DB::table('TEC_VENTA as v')
+            ->join('TEC_PEDIDO as p', 'p.PED_Pedido', '=', 'v.PED_Pedido')
+            ->join('TEC_CLIENTE as c', 'c.CLI_Cliente', '=', 'p.CLI_Cliente')
+            ->join('TEC_ESTADO_PAGO as ep', 'ep.EPA_Estado_Pago', '=', 'v.EPA_Estado_Pago')
+            ->join('TEC_ESTADO_VENTA as ev', 'ev.ESV_Estado_Venta', '=', 'v.ESV_Estado_Venta')
+            ->select(
+                'v.*',
+                'ep.EPA_Codigo as VEN_Estado_Pago',
+                'ev.ESV_Codigo as VEN_Estado',
+                'c.CLI_Identificacion',
+                'c.CLI_Primer_Nombre',
+                'c.CLI_Primer_Apellido',
+            );
+
+        if ($request->filled('cliente_id')) {
+            $query->where('p.CLI_Cliente', $request->integer('cliente_id'));
+        }
+        if ($request->filled('estado_pago')) {
+            $query->where('ep.EPA_Codigo', $request->query('estado_pago'));
+        }
+        if ($request->filled('desde')) {
+            $query->whereDate('v.VEN_Fecha', '>=', $request->query('desde'));
+        }
+        if ($request->filled('hasta')) {
+            $query->whereDate('v.VEN_Fecha', '<=', $request->query('hasta'));
+        }
+
+        $sales = $query->orderByDesc('v.VEN_Fecha')->paginate(20);
+        foreach ($sales as $sale) {
+            $sale->pagos = DB::table('TEC_PAGO as pg')
+                ->join('TEC_METODO_PAGO as mp', 'mp.MPA_Metodo_Pago', '=', 'pg.MPA_Metodo_Pago')
+                ->where('pg.VEN_Venta', $sale->VEN_Venta)
+                ->select('pg.*', 'mp.MPA_Codigo as PAG_Metodo', 'mp.MPA_Nombre as metodo_nombre')
+                ->orderByDesc('pg.PAG_Fecha')
+                ->get();
+        }
+
+        return response()->json($sales);
+    }
+
+    public function storeFromOrder(Request $request, int $orderId): JsonResponse
+    {
+        $this->requirePermission($request, 'VENTAS.REGISTRAR');
+
+        $saleId = DB::transaction(function () use ($request, $orderId) {
+            $order = DB::table('TEC_PEDIDO as p')
+                ->join('TEC_ESTADO_PEDIDO as e', 'e.ESP_Estado_Pedido', '=', 'p.ESP_Estado_Pedido')
+                ->where('p.PED_Pedido', $orderId)
+                ->lockForUpdate()
+                ->select('p.*', 'e.ESP_Codigo as PED_Estado')
+                ->first();
+            abort_unless($order, 404, 'Pedido no encontrado.');
+            abort_unless(in_array($order->PED_Estado, ['APROBADO', 'EN_PROCESO'], true), 409, 'El pedido no está aprobado.');
+            abort_if(DB::table('TEC_VENTA')->where('PED_Pedido', $orderId)->exists(), 409, 'El pedido ya fue vendido.');
+
+            $details = DB::table('TEC_DETALLE_PEDIDO')->where('PED_Pedido', $orderId)->get();
+            abort_if($details->isEmpty(), 422, 'No se puede completar una venta sin productos.');
+
+            foreach ($details as $detail) {
+                $stock = DB::table('TEC_INVENTARIO')
+                    ->where('PRO_Producto', $detail->PRO_Producto)
+                    ->lockForUpdate()
+                    ->first();
+                abort_if(
+                    ! $stock || $stock->INV_Existencia < $detail->DPE_Cantidad,
+                    409,
+                    'Inventario insuficiente para uno o más productos.',
+                );
+            }
+
+            $saleId = DB::table('TEC_VENTA')->insertGetId([
+                'PED_Pedido' => $orderId,
+                'USU_Usuario' => $request->user()->USU_Usuario,
+                'VEN_Fecha' => now(),
+                'VEN_Total' => $order->PED_Total,
+                'VEN_Pagado' => 0,
+                'VEN_Saldo' => $order->PED_Total,
+                'EPA_Estado_Pago' => Catalogos::estadoPago('PENDIENTE'),
+                'ESV_Estado_Venta' => Catalogos::estadoVenta('FINALIZADA'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ], 'VEN_Venta');
+
+            foreach ($details as $detail) {
+                $stock = DB::table('TEC_INVENTARIO')
+                    ->where('PRO_Producto', $detail->PRO_Producto)
+                    ->lockForUpdate()
+                    ->first();
+                $before = (int) $stock->INV_Existencia;
+                $after = $before - (int) $detail->DPE_Cantidad;
+                DB::table('TEC_INVENTARIO')->where('INV_Inventario', $stock->INV_Inventario)->update([
+                    'INV_Existencia' => $after,
+                    'updated_at' => now(),
+                ]);
+                DB::table('TEC_DETALLE_VENTA')->insert([
+                    'VEN_Venta' => $saleId,
+                    'PRO_Producto' => $detail->PRO_Producto,
+                    'DVE_Cantidad' => $detail->DPE_Cantidad,
+                    'DVE_Precio_Unitario' => $detail->DPE_Precio_Unitario,
+                    'DVE_Subtotal' => $detail->DPE_Subtotal,
+                ]);
+                DB::table('TEC_MOVIMIENTO_INVENTARIO')->insert([
+                    'PRO_Producto' => $detail->PRO_Producto,
+                    'USU_Usuario' => $request->user()->USU_Usuario,
+                    'TIM_Tipo_Movimiento' => Catalogos::tipoMovimiento('SALIDA'),
+                    'MOV_Cantidad' => -$detail->DPE_Cantidad,
+                    'MOV_Existencia_Anterior' => $before,
+                    'MOV_Existencia_Nueva' => $after,
+                    'MOV_Documento_Tipo' => 'VENTA',
+                    'MOV_Documento' => $saleId,
+                    'MOV_Motivo' => 'Venta finalizada',
+                    'MOV_Fecha' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $this->syncAlert((int) $detail->PRO_Producto);
+            }
+
+            DB::table('TEC_PEDIDO')->where('PED_Pedido', $orderId)->update([
+                'ESP_Estado_Pedido' => Catalogos::estadoPedido('COMPLETADO'),
+                'updated_at' => now(),
+            ]);
+            DB::table('TEC_HISTORIAL_ESTADO')->insert([
+                'PED_Pedido' => $orderId,
+                'USU_Usuario' => $request->user()->USU_Usuario,
+                'HES_Estado_Anterior' => $order->PED_Estado,
+                'HES_Estado_Nuevo' => 'COMPLETADO',
+                'HES_Motivo' => 'Venta finalizada',
+                'HES_Fecha' => now(),
+            ]);
+
+            return $saleId;
+        });
+
+        $this->audit($request, 'VENTAS', 'FINALIZAR', $saleId, ['pedido' => $orderId]);
+
+        return response()->json(['id' => $saleId, 'message' => 'Venta finalizada e inventario actualizado.'], 201);
+    }
+
+    public function payment(Request $request, int $saleId): JsonResponse
+    {
+        $this->requirePermission($request, 'PAGOS.REGISTRAR');
+        $data = $request->validate([
+            'monto' => ['required', 'numeric', 'gt:0'],
+            'metodo' => ['required', 'string', Rule::exists('TEC_METODO_PAGO', 'MPA_Codigo')->where('MPA_Estado', true)],
+            'referencia' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        $paymentId = DB::transaction(function () use ($request, $saleId, $data) {
+            $sale = DB::table('TEC_VENTA')->where('VEN_Venta', $saleId)->lockForUpdate()->first();
+            abort_unless($sale, 404, 'Venta no encontrada.');
+            abort_if((float) $data['monto'] > (float) $sale->VEN_Saldo, 422, 'El pago supera el saldo pendiente.');
+
+            $paid = (float) $sale->VEN_Pagado + (float) $data['monto'];
+            $balance = round((float) $sale->VEN_Total - $paid, 2);
+            DB::table('TEC_VENTA')->where('VEN_Venta', $saleId)->update([
+                'VEN_Pagado' => $paid,
+                'VEN_Saldo' => $balance,
+                'EPA_Estado_Pago' => Catalogos::estadoPago($balance <= 0 ? 'PAGADA' : 'PARCIAL'),
+                'updated_at' => now(),
+            ]);
+
+            return DB::table('TEC_PAGO')->insertGetId([
+                'VEN_Venta' => $saleId,
+                'USU_Usuario' => $request->user()->USU_Usuario,
+                'PAG_Monto' => $data['monto'],
+                'MPA_Metodo_Pago' => Catalogos::metodoPago($data['metodo']),
+                'PAG_Fecha' => now(),
+                'PAG_Referencia' => $data['referencia'] ?? null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ], 'PAG_Pago');
+        });
+
+        $this->audit($request, 'PAGOS', 'REGISTRAR', $paymentId, ['venta' => $saleId, 'monto' => $data['monto']]);
+
+        return response()->json(['id' => $paymentId, 'message' => 'Pago registrado.'], 201);
+    }
+}
