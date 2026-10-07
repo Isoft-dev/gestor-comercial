@@ -103,7 +103,7 @@ onMounted(load)
 <template>
   <header class="page-header">
     <div>
-      <p class="eyebrow">Módulo obligatorio</p>
+      <p class="eyebrow">Catálogo</p>
       <h1 class="page-title"><Package :size="26" :stroke-width="2" /> Productos</h1>
     </div>
   </header>
@@ -141,7 +141,7 @@ onMounted(load)
         <label>Existencia mínima<input v-model="form.existencia_minima" type="number" min="0" step="1" required /></label>
         <label>Descripción<input v-model="form.descripcion" /></label>
       </div>
-      <p class="muted">La existencia actual no se edita aquí. Solo cambia con compras, ventas o ajustes.</p>
+      <p class="muted">La existencia actual no se edita en este formulario.</p>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear producto' }}</button>
         <button v-if="editingId" class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>

@@ -7,6 +7,7 @@ use App\Support\Catalogos;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class TechStoreFlowTest extends TestCase
@@ -429,6 +430,28 @@ class TechStoreFlowTest extends TestCase
         ])->assertUnprocessable();
 
         $this->deleteJson('/api/usuarios/1')->assertStatus(405);
+    }
+
+    public function test_admin_can_update_user_name_without_changing_password(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $operator = User::where('USU_Correo', 'operador@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+
+        $this->putJson("/api/usuarios/{$operator->USU_Usuario}", [
+            'rol_id' => $operator->ROL_Rol,
+            'primer_nombre' => 'Oscar',
+            'primer_apellido' => 'Operador',
+            'correo' => 'operador@techstore.test',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('TEC_USUARIO', [
+            'USU_Usuario' => $operator->USU_Usuario,
+            'USU_Primer_Nombre' => 'Oscar',
+        ]);
+        $this->assertTrue(
+            Hash::check('TechStore2026!', $operator->fresh()->USU_Contrasena)
+        );
     }
 
     public function test_public_catalog_is_available_and_supervisor_cannot_query_clients(): void

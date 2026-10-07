@@ -60,6 +60,29 @@ class AuthController extends ApiController
         return response()->json($this->profile($request->user()));
     }
 
+    public function home(Request $request): JsonResponse
+    {
+        $codes = DB::table('TEC_ROL_PERMISO as rp')
+            ->join('TEC_PERMISO as p', 'p.PER_Permiso', '=', 'rp.PER_Permiso')
+            ->where('rp.ROL_Rol', $request->user()->ROL_Rol)
+            ->where('p.PER_Estado', true)
+            ->pluck('p.PER_Codigo');
+
+        $counts = [];
+        if ($codes->contains('USUARIOS.GESTIONAR')) {
+            $counts['usuarios'] = DB::table('TEC_USUARIO')->count('USU_Usuario');
+            $counts['roles'] = DB::table('TEC_ROL')->count('ROL_Rol');
+        }
+        if ($codes->contains('CLIENTES.GESTIONAR')) {
+            $counts['clientes'] = DB::table('TEC_CLIENTE')->count('CLI_Cliente');
+        }
+        if ($codes->contains('CATALOGOS.GESTIONAR')) {
+            $counts['productos'] = DB::table('TEC_PRODUCTO')->count('PRO_Producto');
+        }
+
+        return response()->json($counts);
+    }
+
     public function logout(Request $request): JsonResponse
     {
         $this->audit($request, 'ACCESO', 'CERRAR_SESION', $request->user()->USU_Usuario);
@@ -102,7 +125,9 @@ class AuthController extends ApiController
         return [
             'id' => $user->USU_Usuario,
             'primer_nombre' => $user->USU_Primer_Nombre,
+            'segundo_nombre' => $user->USU_Segundo_Nombre,
             'primer_apellido' => $user->USU_Primer_Apellido,
+            'segundo_apellido' => $user->USU_Segundo_Apellido,
             'correo' => $user->USU_Correo,
             'rol' => $role,
             'permisos' => $permisos,

@@ -1,5 +1,5 @@
 :root {
-  font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
+  font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   color: var(--ink);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -16,7 +16,7 @@
   --success: #047857;
   --warning: #c2410c;
   --indigo: #4338ca;
-  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, monospace;
   --shadow: 0 1px 2px rgba(26, 22, 18, .04), 0 10px 28px rgba(26, 22, 18, .06);
   --radius: 16px;
 }
@@ -170,7 +170,26 @@ p { margin: 0; }
 .two-column { display: grid; grid-template-columns: minmax(280px, .7fr) minmax(0, 1.3fr); gap: 20px; align-items: start; }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 form { display: grid; gap: 14px; }
-label { display: grid; gap: 6px; color: #4a433b; font-size: .82rem; font-weight: 700; }
+label { color: #4a433b; font-size: .82rem; font-weight: 700; }
+label:not(.switch):not(.check-row) {
+  display: grid;
+  grid-template-columns: max-content auto 1fr;
+  row-gap: 6px;
+  column-gap: 3px;
+  align-items: baseline;
+}
+label:not(.switch):not(.check-row) > input,
+label:not(.switch):not(.check-row) > select,
+label:not(.switch):not(.check-row) > textarea,
+label:not(.switch):not(.check-row) > .field-icon,
+label:not(.switch):not(.check-row) > small {
+  grid-column: 1 / -1;
+}
+label:not(.switch):not(.check-row):has([required])::after {
+  content: "*";
+  color: var(--danger);
+  font-weight: 800;
+}
 input, select, textarea {
   width: 100%;
   padding: 10px 12px;
@@ -358,6 +377,29 @@ textarea { min-height: 80px; resize: vertical; }
 .metric-pending { --metric: var(--indigo); }
 .metric-stock { --metric: var(--danger); }
 .metric-purchases { --metric: #44403c; }
+.metric-grid.cols-4 { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
+
+.home-hero { margin-bottom: 20px; }
+.home-hero p { color: var(--muted); max-width: 68ch; line-height: 1.55; }
+.home-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.home-action {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fffdf9;
+  color: inherit;
+  text-decoration: none;
+}
+.home-action svg { color: var(--accent); }
+.home-action strong { font-size: .95rem; }
+.home-action span { color: var(--muted); font-size: .8rem; line-height: 1.4; }
+.home-action:hover { border-color: #99f6e4; background: #f0fdfa; }
 
 .chart-grid, .report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 20px; }
 .report-grid .button { margin-top: 14px; width: 100%; }
@@ -484,7 +526,6 @@ code { white-space: pre-wrap; font-size: .72rem; color: #57534e; font-family: va
   pointer-events: none;
 }
 .field-icon input { padding-left: 38px; }
-.demo-note { margin-top: 18px; color: var(--muted); font-size: .72rem; }
 .login-panel .link { margin-top: 12px; }
 
 .shop-page { max-width: 1180px; margin: 0 auto; padding: 28px 20px 48px; }
@@ -503,7 +544,8 @@ code { white-space: pre-wrap; font-size: .72rem; color: #57534e; font-family: va
 .cart-form { display: grid; gap: 10px; margin-top: 12px; }
 
 @media (max-width: 1179px) {
-  .metric-grid { grid-template-columns: repeat(3, 1fr); }
+  .metric-grid,
+  .metric-grid.cols-4 { grid-template-columns: repeat(3, 1fr); }
   .two-column, .chart-grid, .report-grid { grid-template-columns: 1fr; }
   .compact-form { grid-template-columns: repeat(2, 1fr); }
   .content { padding: 24px; }
@@ -547,7 +589,10 @@ code { white-space: pre-wrap; font-size: .72rem; color: #57534e; font-family: va
   .brand-copy, .nav-label, .profile-copy, .btn-label { display: block; }
   .sidebar nav a { justify-content: flex-start; }
   .content { padding: 18px 14px 32px; }
-  .metric-grid, .form-grid, .compact-form { grid-template-columns: 1fr; }
+  .metric-grid,
+  .metric-grid.cols-4,
+  .form-grid,
+  .compact-form { grid-template-columns: 1fr; }
   .page-header { align-items: flex-start; flex-wrap: wrap; }
   .page-header .button { width: 100%; }
   .login-page { grid-template-columns: 1fr; }

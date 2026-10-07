@@ -18,10 +18,12 @@ Route::post('/tienda/pedidos', [ShopController::class, 'order']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/inicio', [AuthController::class, 'home']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     Route::get('/usuarios', [CatalogController::class, 'users']);
     Route::post('/usuarios', [CatalogController::class, 'storeUser']);
+    Route::put('/usuarios/{id}', [CatalogController::class, 'updateUser']);
     Route::patch('/usuarios/{id}/estado', [CatalogController::class, 'toggleUser']);
     Route::patch('/usuarios/{id}/desbloquear', [CatalogController::class, 'unlockUser']);
     Route::get('/roles', [RoleController::class, 'index']);
