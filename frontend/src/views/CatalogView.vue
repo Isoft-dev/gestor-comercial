@@ -154,8 +154,8 @@ watch(type, () => { reset(); load() }, { immediate: true })
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <section class="two-column">
-    <form class="panel" @submit.prevent="submit">
+  <section :class="{ 'two-column': auth.can('CATALOGOS.GESTIONAR') }">
+    <form v-if="auth.can('CATALOGOS.GESTIONAR')" class="panel" @submit.prevent="submit">
       <div class="panel-heading"><Save :size="18" /><h2>{{ editingId ? 'Modificar registro' : 'Nuevo registro' }}</h2></div>
       <div class="form-grid">
         <label v-for="[name, label, inputType, kind] in fields" :key="name">
@@ -186,7 +186,7 @@ watch(type, () => { reset(); load() }, { immediate: true })
               <td>{{ item.PRV_Razon_Social || item.CAT_Nombre || item.MAR_Nombre }}</td>
               <td><span class="status" :class="{ off: !isActive(item) }">{{ isActive(item) ? 'Activo' : 'Inactivo' }}</span></td>
               <td class="actions">
-                <button class="link" type="button" @click="fill(item)"><Pencil :size="14" /> Editar</button>
+                <button v-if="auth.can('CATALOGOS.GESTIONAR')" class="link" type="button" @click="fill(item)"><Pencil :size="14" /> Editar</button>
                 <button v-if="isActive(item) && auth.can(['CATALOGOS.INACTIVAR', 'CATALOGOS.GESTIONAR'])" class="link danger" type="button" @click="deactivate(item)">
                   <Ban :size="14" /> Inactivar
                 </button>

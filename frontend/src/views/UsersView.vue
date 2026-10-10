@@ -1,10 +1,12 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import api from '../services/api'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { CircleAlert, CircleCheck, Pencil, Save, UserPlus, Users, X } from '@lucide/vue'
 
+const router = useRouter()
 const auth = useAuthStore()
 const users = ref([])
 const roles = ref([])
@@ -51,7 +53,13 @@ async function submit() {
     if (editingId.value) {
       await api.put(`/usuarios/${editingId.value}`, payload)
       message.value = 'Usuario actualizado.'
-      if (editingId.value === auth.user?.id) await auth.refreshProfile()
+      if (editingId.value === auth.user?.id) {
+        await auth.refreshProfile()
+        if (!auth.can('USUARIOS.CONSULTAR')) {
+          await router.push(auth.homePath())
+          return
+        }
+      }
     } else {
       await api.post('/usuarios', payload)
       message.value = 'Usuario creado.'
@@ -113,8 +121,8 @@ onMounted(load)
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <section class="two-column">
-    <form class="panel" @submit.prevent="submit">
+  <section :class="{ 'two-column': auth.can('USUARIOS.GESTIONAR') }">
+    <form v-if="auth.can('USUARIOS.GESTIONAR')" class="panel" @submit.prevent="submit">
       <div class="panel-heading">
         <UserPlus :size="18" />
         <h2>{{ editingId ? 'Modificar usuario' : 'Nuevo usuario' }}</h2>
@@ -155,19 +163,20 @@ onMounted(load)
           <td>{{ user.correo }}</td>
           <td>{{ user.rol }}</td>
           <td>
-            <label class="switch" :class="{ disabled: user.id === auth.user?.id }">
+            <label v-if="auth.can('USUARIOS.GESTIONAR')" class="switch" :class="{ disabled: user.id === auth.user?.id }">
               <input type="checkbox" :checked="user.estado" :disabled="user.id === auth.user?.id" @change="toggle(user)" />
               <span class="switch-ui"></span>
               <span class="switch-text">{{ user.estado ? 'Activo' : 'Inactivo' }}</span>
             </label>
+            <span v-else class="status" :class="{ off: !user.estado }">{{ user.estado ? 'Activo' : 'Inactivo' }}</span>
           </td>
           <td>
             <span v-if="isLocked(user)" class="status off">Bloqueado</span>
-            <button v-if="isLocked(user)" class="link" type="button" @click="unlock(user)">Desbloquear</button>
-            <span v-else class="muted">Libre</span>
+            <button v-if="isLocked(user) && auth.can('USUARIOS.GESTIONAR')" class="link" type="button" @click="unlock(user)">Desbloquear</button>
+            <span v-else-if="!isLocked(user)" class="muted">Libre</span>
           </td>
           <td>
-            <button class="link" type="button" @click="edit(user)"><Pencil :size="14" /> Editar</button>
+            <button v-if="auth.can('USUARIOS.GESTIONAR')" class="link" type="button" @click="edit(user)"><Pencil :size="14" /> Editar</button>
           </td>
         </tr></tbody>
       </table></div>

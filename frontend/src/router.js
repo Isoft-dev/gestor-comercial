@@ -15,14 +15,14 @@ const routes = [
       : HomeView,
     meta: esEntregaCierre ? { permission: 'REPORTES.CONSULTAR' } : {},
   },
-  { path: '/clientes', component: () => import('./views/ClientsView.vue'), meta: { permission: 'CLIENTES.GESTIONAR' } },
-  { path: '/productos', component: () => import('./views/ProductsView.vue'), meta: { permission: 'CATALOGOS.GESTIONAR' } },
-  { path: '/categorias', component: () => import('./views/CatalogView.vue'), meta: { permission: 'CATALOGOS.GESTIONAR', catalog: 'categorias' } },
-  { path: '/marcas', component: () => import('./views/CatalogView.vue'), meta: { permission: 'CATALOGOS.GESTIONAR', catalog: 'marcas' } },
-  { path: '/proveedores', component: () => import('./views/CatalogView.vue'), meta: { permission: 'CATALOGOS.GESTIONAR', catalog: 'proveedores' } },
+  { path: '/clientes', component: () => import('./views/ClientsView.vue'), meta: { permission: 'CLIENTES.CONSULTAR' } },
+  { path: '/productos', component: () => import('./views/ProductsView.vue'), meta: { permission: 'CATALOGOS.CONSULTAR' } },
+  { path: '/categorias', component: () => import('./views/CatalogView.vue'), meta: { permission: 'CATALOGOS.CONSULTAR', catalog: 'categorias' } },
+  { path: '/marcas', component: () => import('./views/CatalogView.vue'), meta: { permission: 'CATALOGOS.CONSULTAR', catalog: 'marcas' } },
+  { path: '/proveedores', component: () => import('./views/CatalogView.vue'), meta: { permission: 'CATALOGOS.CONSULTAR', catalog: 'proveedores' } },
   { path: '/catalogos/:type?', redirect: (to) => `/${to.params.type || 'proveedores'}` },
-  { path: '/usuarios', component: () => import('./views/UsersView.vue'), meta: { permission: 'USUARIOS.GESTIONAR' } },
-  { path: '/roles', component: () => import('./views/RolesView.vue'), meta: { permission: 'USUARIOS.GESTIONAR' } },
+  { path: '/usuarios', component: () => import('./views/UsersView.vue'), meta: { permission: 'USUARIOS.CONSULTAR' } },
+  { path: '/roles', component: () => import('./views/RolesView.vue'), meta: { permission: 'USUARIOS.CONSULTAR' } },
   { path: '/compras', component: () => import('./views/PurchasesView.vue'), meta: { permission: 'COMPRAS.REGISTRAR' } },
   { path: '/inventario', component: () => import('./views/InventoryView.vue'), meta: { permission: ['INVENTARIO.AJUSTAR', 'COMPRAS.REGISTRAR', 'PEDIDOS.REGISTRAR', 'VENTAS.REGISTRAR', 'REPORTES.CONSULTAR'] } },
   { path: '/pedidos', component: () => import('./views/OrdersView.vue'), meta: { permission: ['PEDIDOS.REGISTRAR', 'PEDIDOS.APROBAR'] } },
@@ -39,11 +39,19 @@ function allowed(auth, permission) {
   return Array.isArray(permission) ? permission.some((item) => auth.can(item)) : auth.can(permission)
 }
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
   if (!moduloEnEntrega(to.path)) return auth.isAuthenticated ? auth.homePath() : '/login'
   if (!to.meta.public && !auth.isAuthenticated) return '/login'
   if (to.path === '/login' && auth.isAuthenticated) return auth.homePath()
+  if (auth.isAuthenticated && !to.meta.public) {
+    try {
+      await auth.ensureFreshProfile()
+    } catch {
+      await auth.logout()
+      return '/login'
+    }
+  }
   if (!allowed(auth, to.meta.permission)) return '/acceso-denegado'
   return true
 })

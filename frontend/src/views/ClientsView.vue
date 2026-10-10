@@ -131,7 +131,7 @@ onMounted(load)
   </form>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <section class="two-column">
+  <section :class="{ 'two-column': auth.can('CLIENTES.GESTIONAR') }">
     <form v-if="auth.can('CLIENTES.GESTIONAR')" class="panel" @submit.prevent="submit">
       <div class="panel-heading">
         <UserPlus :size="18" />
@@ -171,7 +171,7 @@ onMounted(load)
               <td>{{ item.CLI_Correo || item.CLI_Telefono || '—' }}</td>
               <td><span class="status" :class="{ off: !item.CLI_Estado }">{{ item.CLI_Estado ? 'Activo' : 'Inactivo' }}</span></td>
               <td class="actions">
-                <button class="link" type="button" @click="edit(item)"><Pencil :size="14" /> Editar</button>
+                <button v-if="auth.can('CLIENTES.GESTIONAR')" class="link" type="button" @click="edit(item)"><Pencil :size="14" /> Editar</button>
                 <button v-if="item.CLI_Estado && auth.can('CLIENTES.GESTIONAR')" class="link danger" type="button" @click="deactivate(item)">
                   <Ban :size="14" /> Inactivar
                 </button>

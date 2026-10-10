@@ -134,7 +134,7 @@ onMounted(load)
   </form>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <section class="two-column">
+  <section :class="{ 'two-column': auth.can('CATALOGOS.GESTIONAR') }">
     <form v-if="auth.can('CATALOGOS.GESTIONAR')" class="panel" @submit.prevent="submit">
       <div class="panel-heading">
         <Package :size="18" />
@@ -161,8 +161,7 @@ onMounted(load)
         <label v-if="editingId">Existencia actual<input v-model.number="form.existencia" type="number" min="0" step="1" required /></label>
         <label>Descripción<input v-model="form.descripcion" maxlength="500" :pattern="fields.empresa.pattern" :title="fields.empresa.title" @input="form.descripcion = fields.empresa.clean($event.target.value)" /></label>
       </div>
-      <p class="muted">{{ editingId ? 'La existencia actual se puede ajustar aquí mientras no esté el módulo de inventario.' : 'Al crear el producto la existencia inicia en 0. Luego puede editarla.' }}</p>
-      <p class="muted">El precio de venta debe ser mayor que el costo.</p>
+      <p class="muted">La existencia actual no se edita en este formulario.</p>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear producto' }}</button>
         <button v-if="editingId" class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
@@ -192,7 +191,7 @@ onMounted(load)
               <td>{{ item.INV_Existencia }} / mín. {{ item.PRO_Existencia_Minima }}</td>
               <td><span class="status" :class="{ off: !item.PRO_Estado }">{{ item.PRO_Estado ? 'Activo' : 'Inactivo' }}</span></td>
               <td class="actions">
-                <button class="link" type="button" @click="edit(item)"><Pencil :size="14" /> Editar</button>
+                <button v-if="auth.can('CATALOGOS.GESTIONAR')" class="link" type="button" @click="edit(item)"><Pencil :size="14" /> Editar</button>
                 <button v-if="item.PRO_Estado && auth.can(['CATALOGOS.INACTIVAR', 'CATALOGOS.GESTIONAR'])" class="link danger" type="button" @click="deactivate(item)">
                   <Ban :size="14" /> Inactivar
                 </button>

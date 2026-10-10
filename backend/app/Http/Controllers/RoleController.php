@@ -15,7 +15,7 @@ class RoleController extends ApiController
 
     public function index(Request $request): JsonResponse
     {
-        $this->requirePermission($request, 'USUARIOS.GESTIONAR');
+        $this->requireView($request, 'USUARIOS');
 
         $query = DB::table('TEC_ROL')->orderBy('ROL_Nombre');
         if ($request->boolean('solo_activos')) {
@@ -39,7 +39,7 @@ class RoleController extends ApiController
 
     public function permissions(Request $request): JsonResponse
     {
-        $this->requirePermission($request, 'USUARIOS.GESTIONAR');
+        $this->requireView($request, 'USUARIOS');
 
         return response()->json($this->visiblePermissions());
     }
@@ -89,7 +89,10 @@ class RoleController extends ApiController
             'permisos' => $permissions,
         ]);
 
-        return response()->json(['message' => 'Rol actualizado.']);
+        return response()->json([
+            'message' => 'Rol actualizado.',
+            'permisos' => $this->permissionCodesForRole($id),
+        ]);
     }
 
     public function toggle(Request $request, int $id): JsonResponse
@@ -194,9 +197,14 @@ class RoleController extends ApiController
             return $permissionIds;
         }
 
-        $required = DB::table('TEC_PERMISO')->where('PER_Codigo', 'USUARIOS.GESTIONAR')->value('PER_Permiso');
-        if ($required && ! in_array((int) $required, array_map('intval', $permissionIds), true)) {
-            $permissionIds[] = (int) $required;
+        $required = DB::table('TEC_PERMISO')
+            ->whereIn('PER_Codigo', ['USUARIOS.CONSULTAR', 'USUARIOS.GESTIONAR'])
+            ->pluck('PER_Permiso');
+
+        foreach ($required as $permissionId) {
+            if (! in_array((int) $permissionId, array_map('intval', $permissionIds), true)) {
+                $permissionIds[] = (int) $permissionId;
+            }
         }
 
         return array_values(array_unique(array_map('intval', $permissionIds)));

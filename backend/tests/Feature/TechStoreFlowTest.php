@@ -526,6 +526,42 @@ class TechStoreFlowTest extends TestCase
         $this->getJson('/api/usuarios')->assertForbidden();
     }
 
+    public function test_consult_permission_allows_read_but_not_write(): void
+    {
+        $consultId = DB::table('TEC_PERMISO')->where('PER_Codigo', 'CLIENTES.CONSULTAR')->value('PER_Permiso');
+        $roleId = DB::table('TEC_ROL')->insertGetId([
+            'ROL_Nombre' => 'SOLO_LECTURA',
+            'ROL_Estado' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], 'ROL_Rol');
+        DB::table('TEC_ROL_PERMISO')->insert([
+            'ROL_Rol' => $roleId,
+            'PER_Permiso' => $consultId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $user = User::create([
+            'ROL_Rol' => $roleId,
+            'USU_Primer_Nombre' => 'Lector',
+            'USU_Primer_Apellido' => 'Catalogo',
+            'USU_Correo' => 'lector@techstore.test',
+            'USU_Contrasena' => 'Password2026!',
+            'USU_Estado' => true,
+        ]);
+        $this->actingAs($user, 'sanctum');
+
+        $this->getJson('/api/catalogos/clientes')->assertOk();
+        $this->getJson('/api/catalogos/productos')->assertForbidden();
+        $this->getJson('/api/usuarios')->assertForbidden();
+        $this->postJson('/api/catalogos/clientes', [
+            'identificacion' => 'DPI-333444',
+            'primer_nombre' => 'Mario',
+            'primer_apellido' => 'Lector',
+        ])->assertForbidden();
+    }
+
     public function test_category_can_be_inactivated(): void
     {
         $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
@@ -577,6 +613,7 @@ class TechStoreFlowTest extends TestCase
 
         $this->getJson('/api/roles?con_permisos=1')
             ->assertOk()
+            ->assertJsonFragment(['PER_Codigo' => 'CLIENTES.CONSULTAR'])
             ->assertJsonFragment(['PER_Codigo' => 'CLIENTES.GESTIONAR'])
             ->assertJsonMissing(['PER_Codigo' => 'REPORTES.CONSULTAR']);
 
@@ -597,6 +634,10 @@ class TechStoreFlowTest extends TestCase
         $this->assertDatabaseHas('TEC_ROL_PERMISO', [
             'ROL_Rol' => $adminRole,
             'PER_Permiso' => $reportPermission,
+        ]);
+        $this->assertDatabaseHas('TEC_ROL_PERMISO', [
+            'ROL_Rol' => $adminRole,
+            'PER_Permiso' => $userPermission,
         ]);
     }
 

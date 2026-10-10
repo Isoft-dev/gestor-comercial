@@ -5,8 +5,11 @@ namespace App\Support;
 class Entrega
 {
     public const DESDE = [
+        'USUARIOS.CONSULTAR' => 1,
         'USUARIOS.GESTIONAR' => 1,
+        'CLIENTES.CONSULTAR' => 1,
         'CLIENTES.GESTIONAR' => 1,
+        'CATALOGOS.CONSULTAR' => 1,
         'CATALOGOS.GESTIONAR' => 1,
         'CATALOGOS.INACTIVAR' => 1,
         'COMPRAS.REGISTRAR' => 2,

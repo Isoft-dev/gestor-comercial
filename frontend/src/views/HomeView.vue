@@ -32,18 +32,21 @@ const name = computed(() => {
 })
 
 const metrics = computed(() => [
-  { key: 'usuarios', label: 'Usuarios', value: counts.value.usuarios, icon: Users, tone: 'metric-sales', show: auth.can('USUARIOS.GESTIONAR') },
-  { key: 'roles', label: 'Roles', value: counts.value.roles, icon: Shield, tone: 'metric-pending', show: auth.can('USUARIOS.GESTIONAR') },
-  { key: 'clientes', label: 'Clientes', value: counts.value.clientes, icon: IdCard, tone: 'metric-balance', show: auth.can('CLIENTES.GESTIONAR') },
-  { key: 'productos', label: 'Productos', value: counts.value.productos, icon: Package, tone: 'metric-purchases', show: auth.can('CATALOGOS.GESTIONAR') },
+  { key: 'usuarios', label: 'Usuarios', value: counts.value.usuarios, icon: Users, tone: 'metric-sales', show: auth.can('USUARIOS.CONSULTAR') },
+  { key: 'roles', label: 'Roles', value: counts.value.roles, icon: Shield, tone: 'metric-pending', show: auth.can('USUARIOS.CONSULTAR') },
+  { key: 'clientes', label: 'Clientes', value: counts.value.clientes, icon: IdCard, tone: 'metric-balance', show: auth.can('CLIENTES.CONSULTAR') },
+  { key: 'productos', label: 'Productos', value: counts.value.productos, icon: Package, tone: 'metric-purchases', show: auth.can('CATALOGOS.CONSULTAR') },
 ].filter((item) => item.show))
 
 const actions = computed(() => [
   { to: '/usuarios', label: 'Gestionar usuarios', detail: 'Crear cuentas y asignar un rol.', icon: UserPlus, show: auth.can('USUARIOS.GESTIONAR') },
   { to: '/roles', label: 'Revisar roles', detail: 'Definir qué puede hacer cada perfil.', icon: Shield, show: auth.can('USUARIOS.GESTIONAR') },
+  { to: '/usuarios', label: 'Ver usuarios', detail: 'Consultar cuentas y roles asignados.', icon: Users, show: auth.can('USUARIOS.CONSULTAR') && !auth.can('USUARIOS.GESTIONAR') },
   { to: '/clientes', label: 'Registrar cliente', detail: 'Alta, consulta, edición e inactivación.', icon: IdCard, show: auth.can('CLIENTES.GESTIONAR') },
+  { to: '/clientes', label: 'Ver clientes', detail: 'Consultar el padrón de clientes.', icon: IdCard, show: auth.can('CLIENTES.CONSULTAR') && !auth.can('CLIENTES.GESTIONAR') },
   { to: '/productos', label: 'Registrar producto', detail: 'SKU, categoría, marca, costo y precio.', icon: Package, show: auth.can('CATALOGOS.GESTIONAR') },
   { to: '/categorias', label: 'Clasificar catálogo', detail: 'Categorías y marcas de los productos.', icon: Tags, show: auth.can('CATALOGOS.GESTIONAR') },
+  { to: '/productos', label: 'Ver productos', detail: 'Consultar el catálogo sin modificarlo.', icon: Package, show: auth.can('CATALOGOS.CONSULTAR') && !auth.can('CATALOGOS.GESTIONAR') },
 ].filter((item) => item.show))
 
 async function load() {

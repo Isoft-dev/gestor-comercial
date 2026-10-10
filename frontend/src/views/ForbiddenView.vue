@@ -10,6 +10,9 @@ import { ShieldOff } from '@lucide/vue'
     </div>
   </header>
   <section class="panel">
-    <p>No tiene permiso para ver esta sección.</p>
+    <p>No tiene permiso para ver esta sección. El menú y la dirección URL usan el mismo permiso: si su rol no incluye el módulo, no puede abrir esa pantalla.</p>
+    <div class="actions">
+      <RouterLink class="button primary" to="/">Volver al inicio</RouterLink>
+    </div>
   </section>
 </template>

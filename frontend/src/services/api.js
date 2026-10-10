@@ -14,10 +14,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status
+    const path = window.location.pathname
+    if (status === 401) {
       localStorage.removeItem('techstore_token')
       localStorage.removeItem('techstore_user')
-      if (window.location.pathname !== '/login') window.location.assign('/login')
+      if (path !== '/login') window.location.assign('/login')
+    }
+    if (status === 403 && path !== '/acceso-denegado' && path !== '/login') {
+      window.location.assign('/acceso-denegado')
     }
     const validation = error.response?.data?.errors
     const firstValidation = validation ? Object.values(validation).flat()[0] : null

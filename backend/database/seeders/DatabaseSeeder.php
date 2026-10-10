@@ -186,9 +186,12 @@ class DatabaseSeeder extends Seeder
         }
 
         $permissions = [
-            ['USUARIOS.GESTIONAR', 'Gestionar usuarios', 'USUARIOS', 'Crear, consultar y activar usuarios'],
-            ['CLIENTES.GESTIONAR', 'Gestionar clientes', 'CLIENTES', 'Alta y edición de clientes'],
-            ['CATALOGOS.GESTIONAR', 'Gestionar catálogos', 'CATALOGOS', 'Proveedores, categorías, marcas y productos'],
+            ['USUARIOS.CONSULTAR', 'Consultar usuarios', 'USUARIOS', 'Ver usuarios y roles sin crear ni modificar'],
+            ['USUARIOS.GESTIONAR', 'Gestionar usuarios', 'USUARIOS', 'Crear, modificar y activar usuarios y roles'],
+            ['CLIENTES.CONSULTAR', 'Consultar clientes', 'CLIENTES', 'Ver el módulo de clientes sin crear ni modificar'],
+            ['CLIENTES.GESTIONAR', 'Gestionar clientes', 'CLIENTES', 'Alta, edición e inactivación de clientes'],
+            ['CATALOGOS.CONSULTAR', 'Consultar catálogos', 'CATALOGOS', 'Ver productos, categorías y marcas sin crear ni modificar'],
+            ['CATALOGOS.GESTIONAR', 'Gestionar catálogos', 'CATALOGOS', 'Crear y editar proveedores, categorías, marcas y productos'],
             ['CATALOGOS.INACTIVAR', 'Inactivar catálogos', 'CATALOGOS', 'Baja lógica de maestros'],
             ['COMPRAS.REGISTRAR', 'Registrar compras', 'COMPRAS', 'Orden de compra y recepción'],
             ['INVENTARIO.AJUSTAR', 'Ajustar inventario', 'INVENTARIO', 'Ajustes y devoluciones supervisadas'],
@@ -200,6 +203,9 @@ class DatabaseSeeder extends Seeder
             ['AUDITORIA.CONSULTAR', 'Consultar auditoría', 'AUDITORIA', 'Bitácora de operaciones'],
         ];
         foreach ($permissions as [$codigo, $nombre, $modulo, $descripcion]) {
+            if (DB::table('TEC_PERMISO')->where('PER_Codigo', $codigo)->exists()) {
+                continue;
+            }
             DB::table('TEC_PERMISO')->insert([
                 'PER_Codigo' => $codigo,
                 'PER_Nombre' => $nombre,

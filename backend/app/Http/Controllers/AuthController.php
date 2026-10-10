@@ -101,16 +101,16 @@ class AuthController extends ApiController
 
     private function homeCounts(array $codes): array
     {
-        $codes = collect($codes);
+        $codes = collect($this->expandImpliedPermissions($codes));
         $counts = [];
-        if ($codes->contains('USUARIOS.GESTIONAR')) {
+        if ($codes->contains('USUARIOS.CONSULTAR')) {
             $counts['usuarios'] = DB::table('TEC_USUARIO')->count('USU_Usuario');
             $counts['roles'] = DB::table('TEC_ROL')->count('ROL_Rol');
         }
-        if ($codes->contains('CLIENTES.GESTIONAR')) {
+        if ($codes->contains('CLIENTES.CONSULTAR')) {
             $counts['clientes'] = DB::table('TEC_CLIENTE')->count('CLI_Cliente');
         }
-        if ($codes->contains('CATALOGOS.GESTIONAR')) {
+        if ($codes->contains('CATALOGOS.CONSULTAR')) {
             $counts['productos'] = DB::table('TEC_PRODUCTO')->count('PRO_Producto');
         }
 

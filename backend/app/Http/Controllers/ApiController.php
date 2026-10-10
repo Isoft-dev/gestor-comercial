@@ -12,22 +12,38 @@ abstract class ApiController extends Controller
         $this->requireAnyPermission($request, [$codigo]);
     }
 
+    protected function requireView(Request $request, string $modulo): void
+    {
+        $this->requirePermission($request, $modulo.'.CONSULTAR');
+    }
+
     protected function requireAnyPermission(Request $request, array $codigos): void
     {
         $user = $request->user();
         abort_unless($user, 403, 'No posee permisos para consultar este módulo.');
 
-        $token = $user->currentAccessToken();
-        $abilities = is_object($token) ? ($token->abilities ?? null) : null;
-        if (is_array($abilities) && $abilities !== []) {
-            $allowed = collect($codigos)->contains(fn (string $codigo) => $token->can($codigo));
-            abort_unless($allowed, 403, 'No posee permisos para consultar este módulo.');
+        $granted = $this->effectivePermissionCodes($user);
+        $allowed = collect($codigos)->contains(fn (string $codigo) => in_array($codigo, $granted, true));
+        abort_unless($allowed, 403, 'No posee permisos para consultar este módulo.');
+    }
 
-            return;
+    protected function effectivePermissionCodes($user): array
+    {
+        return $this->expandImpliedPermissions(
+            $this->permissionCodesForRole((int) $user->ROL_Rol)
+        );
+    }
+
+    protected function expandImpliedPermissions(array $codes): array
+    {
+        $expanded = $codes;
+        foreach ($codes as $code) {
+            if (str_ends_with($code, '.GESTIONAR')) {
+                $expanded[] = substr($code, 0, -strlen('GESTIONAR')).'CONSULTAR';
+            }
         }
 
-        $allowed = collect($codigos)->intersect($this->permissionCodesForRole((int) $user->ROL_Rol))->isNotEmpty();
-        abort_unless($allowed, 403, 'No posee permisos para consultar este módulo.');
+        return array_values(array_unique($expanded));
     }
 
     protected function permissionCodesForRole(int $roleId): array

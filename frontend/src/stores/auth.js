@@ -8,13 +8,22 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(savedUser ? JSON.parse(savedUser) : null)
   const token = ref(localStorage.getItem('techstore_token'))
   const inicio = ref(null)
+  const lastFresh = ref(0)
   const isAuthenticated = computed(() => Boolean(token.value))
   const role = computed(() => user.value?.rol || '')
   const permisos = computed(() => user.value?.permisos || [])
 
+  function hasCode(code) {
+    if (permisos.value.includes(code)) return true
+    if (code.endsWith('.CONSULTAR')) {
+      return permisos.value.includes(code.replace('.CONSULTAR', '.GESTIONAR'))
+    }
+    return false
+  }
+
   function can(permission) {
-    if (Array.isArray(permission)) return permission.some((item) => permisos.value.includes(item))
-    return permisos.value.includes(permission)
+    if (Array.isArray(permission)) return permission.some((item) => can(item))
+    return hasCode(permission)
   }
 
   function homePath() {
@@ -22,9 +31,9 @@ export const useAuthStore = defineStore('auth', () => {
 
     const opciones = [
       { path: '/', permission: 'REPORTES.CONSULTAR' },
-      { path: '/usuarios', permission: 'USUARIOS.GESTIONAR' },
-      { path: '/clientes', permission: 'CLIENTES.GESTIONAR' },
-      { path: '/productos', permission: 'CATALOGOS.GESTIONAR' },
+      { path: '/usuarios', permission: 'USUARIOS.CONSULTAR' },
+      { path: '/clientes', permission: 'CLIENTES.CONSULTAR' },
+      { path: '/productos', permission: 'CATALOGOS.CONSULTAR' },
       { path: '/pedidos', permission: ['PEDIDOS.APROBAR', 'PEDIDOS.REGISTRAR'] },
       { path: '/compras', permission: 'COMPRAS.REGISTRAR' },
       { path: '/reportes', permission: 'REPORTES.CONSULTAR' },
@@ -40,12 +49,20 @@ export const useAuthStore = defineStore('auth', () => {
     inicio.value = data.inicio || null
     localStorage.setItem('techstore_token', data.token)
     localStorage.setItem('techstore_user', JSON.stringify(data.usuario))
+    lastFresh.value = Date.now()
   }
 
   async function refreshProfile() {
     const { data } = await api.get('/me')
     user.value = data
     localStorage.setItem('techstore_user', JSON.stringify(data))
+    lastFresh.value = Date.now()
+  }
+
+  async function ensureFreshProfile(maxAge = 20000) {
+    if (!token.value) return
+    if (Date.now() - lastFresh.value < maxAge) return
+    await refreshProfile()
   }
 
   async function logout() {
@@ -60,5 +77,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, token, inicio, role, permisos, can, homePath, isAuthenticated, login, refreshProfile, logout }
+  return { user, token, inicio, role, permisos, can, homePath, isAuthenticated, login, refreshProfile, ensureFreshProfile, logout }
 })

@@ -23,7 +23,7 @@ class CatalogController extends ApiController
 
     public function index(Request $request, string $type): JsonResponse
     {
-        $this->requirePermission($request, $type === 'clientes' ? 'CLIENTES.GESTIONAR' : 'CATALOGOS.GESTIONAR');
+        $this->requireView($request, $type === 'clientes' ? 'CLIENTES' : 'CATALOGOS');
         $config = $this->config($type);
         $query = DB::table($config['table']);
         $search = trim((string) $request->query('buscar', ''));
@@ -177,7 +177,7 @@ class CatalogController extends ApiController
 
     public function users(Request $request): JsonResponse
     {
-        $this->requirePermission($request, 'USUARIOS.GESTIONAR');
+        $this->requireView($request, 'USUARIOS');
 
         $users = DB::table('TEC_USUARIO as u')
             ->join('TEC_ROL as r', 'r.ROL_Rol', '=', 'u.ROL_Rol')
