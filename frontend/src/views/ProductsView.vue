@@ -141,6 +141,7 @@ onMounted(load)
         <label>Existencia mínima<input v-model="form.existencia_minima" type="number" min="0" step="1" required /></label>
         <label>Descripción<input v-model="form.descripcion" /></label>
       </div>
+      <p class="muted">El precio de venta debe ser mayor que el costo.</p>
       <p class="muted">La existencia actual no se edita aquí. Solo cambia con compras, ventas o ajustes.</p>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear producto' }}</button>

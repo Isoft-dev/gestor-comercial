@@ -305,6 +305,8 @@ class CatalogController extends ApiController
             'costo' => ['required', 'numeric', 'min:0'],
             'precio' => ['required', 'numeric', 'gt:costo'],
             'existencia_minima' => ['required', 'integer', 'min:0'],
+        ], [
+            'precio.gt' => 'El precio de venta debe ser mayor que el costo del producto.',
         ]);
 
         return [
