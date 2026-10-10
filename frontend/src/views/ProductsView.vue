@@ -17,6 +17,7 @@ const error = ref('')
 const editingId = ref(null)
 const photo = ref(null)
 const photoPreview = ref('')
+const photoRemoved = ref(false)
 const photoValidationError = ref('')
 const photoInput = ref(null)
 const form = reactive(emptyForm())
@@ -42,9 +43,20 @@ function reset() {
   editingId.value = null
   photo.value = null
   photoPreview.value = ''
+  photoRemoved.value = false
   photoValidationError.value = ''
   if (photoInput.value) photoInput.value.value = ''
   Object.assign(form, emptyForm())
+}
+
+function clearPhoto() {
+  if (photoObjectUrl) URL.revokeObjectURL(photoObjectUrl)
+  photoObjectUrl = null
+  photo.value = null
+  photoPreview.value = ''
+  photoRemoved.value = true
+  photoValidationError.value = ''
+  if (photoInput.value) photoInput.value.value = ''
 }
 
 function selectPhoto(event) {
@@ -62,13 +74,17 @@ function selectPhoto(event) {
   if (photoValidationError.value) {
     photo.value = null
     event.target.value = ''
-    photoPreview.value = editingId.value
-      ? items.value.find((item) => item.PRO_Producto === editingId.value)?.PRO_Foto_URL || ''
-      : ''
+    photoPreview.value = photoRemoved.value
+      ? ''
+      : (editingId.value
+        ? items.value.find((item) => item.PRO_Producto === editingId.value)?.PRO_Foto_URL || ''
+        : '')
     error.value = photoValidationError.value
+    photoValidationError.value = ''
     return
   }
 
+  photoRemoved.value = false
   photoObjectUrl = selectedPhoto ? URL.createObjectURL(selectedPhoto) : null
   photo.value = selectedPhoto
   photoPreview.value = photoObjectUrl || (editingId.value ? items.value.find((item) => item.PRO_Producto === editingId.value)?.PRO_Foto_URL || '' : '')
@@ -91,12 +107,13 @@ async function load() {
 
 async function submit() {
   message.value = ''
-  error.value = photoValidationError.value
-  if (photoValidationError.value) return
+  error.value = ''
   try {
     const payload = new FormData()
     Object.entries(form).forEach(([key, value]) => payload.append(key, String(value)))
+    if (!auth.can('INVENTARIO.AJUSTAR')) payload.delete('existencia')
     if (photo.value) payload.append('foto', photo.value)
+    if (photoRemoved.value && !photo.value) payload.append('quitar_foto', '1')
 
     if (editingId.value) {
       payload.append('_method', 'PUT')
@@ -132,6 +149,7 @@ function edit(item) {
     marca_id: item.MAR_Marca,
   })
   photo.value = null
+  photoRemoved.value = false
   photoPreview.value = item.PRO_Foto_URL || ''
 }
 
@@ -211,12 +229,16 @@ onMounted(load)
         <label>Costo (Q)<input v-model="form.costo" type="number" min="0" step="0.01" required /></label>
         <label>Precio (Q)<input v-model="form.precio" type="number" min="0" step="0.01" required /></label>
         <label>Existencia mínima<input v-model="form.existencia_minima" type="number" min="0" step="1" required /></label>
-        <label v-if="editingId">Existencia actual<input v-model.number="form.existencia" type="number" min="0" step="1" required /></label>
+        <label v-if="editingId && auth.can('INVENTARIO.AJUSTAR')">Existencia actual<input v-model.number="form.existencia" type="number" min="0" step="1" required /></label>
         <label>Descripción<input v-model="form.descripcion" maxlength="500" :pattern="fields.empresa.pattern" :title="fields.empresa.title" @input="form.descripcion = fields.empresa.clean($event.target.value)" /></label>
         <label>Foto (opcional)<input ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" @change="selectPhoto" /><small class="muted">JPG, PNG o WebP; máximo 2 MB.</small></label>
-        <div v-if="photoPreview" class="photo-preview"><img :src="photoPreview" alt="Vista previa de la foto del producto" /></div>
+        <div v-if="photoPreview" class="photo-preview">
+          <img :src="photoPreview" alt="Vista previa de la foto del producto" />
+          <button class="link danger" type="button" @click="clearPhoto">Quitar foto</button>
+        </div>
       </div>
-      <p class="muted">La existencia actual no se edita en este formulario.</p>
+      <p v-if="editingId && auth.can('INVENTARIO.AJUSTAR')" class="muted">Si cambia la existencia, el sistema registra un ajuste de inventario.</p>
+      <p v-else class="muted">La existencia inicial es 0. Se actualiza al recibir una compra o con un ajuste de inventario.</p>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear producto' }}</button>
         <button v-if="editingId" class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>

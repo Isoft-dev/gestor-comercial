@@ -24,14 +24,13 @@ class AuthController extends ApiController
         $user = User::where('USU_Correo', $credentials['correo'])->first();
 
         if ($user && $this->isLocked($user)) {
-            $minutes = now()->diffInMinutes($user->USU_Bloqueado_Hasta, false);
             $this->audit($request, 'ACCESO', 'BLOQUEO', $user->USU_Usuario, [
                 'motivo' => 'Intento con cuenta bloqueada',
             ], $user->USU_Usuario);
 
             return response()->json([
-                'message' => 'Cuenta bloqueada por intentos fallidos. Intente en '.$minutes.' minuto(s) o solicite el desbloqueo al administrador.',
-            ], 423);
+                'message' => 'Inténtelo más tarde.',
+            ], 422);
         }
 
         if (! $user || ! $user->USU_Estado || ! Hash::check($credentials['contrasena'], $user->USU_Contrasena)) {
@@ -39,7 +38,7 @@ class AuthController extends ApiController
                 $this->registerFailure($request, $user);
             }
 
-            return response()->json(['message' => 'Credenciales inválidas.'], 422);
+            return response()->json(['message' => 'Credenciales inválidas o cuenta inexistente.'], 422);
         }
 
         if ($user->USU_Intentos_Fallidos || $user->USU_Bloqueado_Hasta) {

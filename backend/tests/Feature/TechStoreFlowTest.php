@@ -27,7 +27,16 @@ class TechStoreFlowTest extends TestCase
         $this->postJson('/api/login', [
             'correo' => 'admin@techstore.test',
             'contrasena' => 'incorrecta',
-        ])->assertUnprocessable();
+        ])->assertUnprocessable()->assertJson([
+            'message' => 'Credenciales inválidas o cuenta inexistente.',
+        ]);
+
+        $this->postJson('/api/login', [
+            'correo' => 'nadie@techstore.test',
+            'contrasena' => 'incorrecta',
+        ])->assertUnprocessable()->assertJson([
+            'message' => 'Credenciales inválidas o cuenta inexistente.',
+        ]);
 
         $login = $this->postJson('/api/login', [
             'correo' => 'admin@techstore.test',
@@ -389,6 +398,82 @@ class TechStoreFlowTest extends TestCase
         ]);
     }
 
+    public function test_editing_a_product_does_not_reactivate_it(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $category = DB::table('TEC_CATEGORIA')->value('CAT_Categoria');
+        $brand = DB::table('TEC_MARCA')->value('MAR_Marca');
+
+        $id = $this->postJson('/api/catalogos/productos', [
+            'categoria_id' => $category,
+            'marca_id' => $brand,
+            'sku' => 'TEC-OFF-001',
+            'nombre' => 'Mouse inactivo',
+            'costo' => 10,
+            'precio' => 18,
+            'existencia_minima' => 0,
+        ])->assertCreated()->json('id');
+
+        $this->deleteJson("/api/catalogos/productos/{$id}")->assertOk();
+        $this->assertDatabaseHas('TEC_PRODUCTO', [
+            'PRO_Producto' => $id,
+            'PRO_Estado' => false,
+        ]);
+
+        $this->putJson("/api/catalogos/productos/{$id}", [
+            'categoria_id' => $category,
+            'marca_id' => $brand,
+            'sku' => 'TEC-OFF-001',
+            'nombre' => 'Mouse inactivo editado',
+            'costo' => 12,
+            'precio' => 20,
+            'existencia_minima' => 0,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('TEC_PRODUCTO', [
+            'PRO_Producto' => $id,
+            'PRO_Nombre' => 'Mouse inactivo editado',
+            'PRO_Estado' => false,
+        ]);
+    }
+
+    public function test_operator_cannot_change_stock_from_product_form(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $category = DB::table('TEC_CATEGORIA')->value('CAT_Categoria');
+        $brand = DB::table('TEC_MARCA')->value('MAR_Marca');
+
+        $id = $this->postJson('/api/catalogos/productos', [
+            'categoria_id' => $category,
+            'marca_id' => $brand,
+            'sku' => 'TEC-OP-001',
+            'nombre' => 'Teclado operador',
+            'costo' => 10,
+            'precio' => 18,
+            'existencia_minima' => 0,
+        ])->assertCreated()->json('id');
+
+        $operator = User::where('USU_Correo', 'operador@techstore.test')->firstOrFail();
+        $this->actingAs($operator, 'sanctum');
+        $this->putJson("/api/catalogos/productos/{$id}", [
+            'categoria_id' => $category,
+            'marca_id' => $brand,
+            'sku' => 'TEC-OP-001',
+            'nombre' => 'Teclado operador',
+            'costo' => 10,
+            'precio' => 18,
+            'existencia_minima' => 0,
+            'existencia' => 40,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('TEC_INVENTARIO', [
+            'PRO_Producto' => $id,
+            'INV_Existencia' => 0,
+        ]);
+    }
+
     public function test_product_price_must_be_greater_than_cost_with_a_clear_validation_message(): void
     {
         $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
@@ -424,7 +509,7 @@ class TechStoreFlowTest extends TestCase
             'costo' => 10,
             'precio' => 18,
             'existencia_minima' => 0,
-            'foto' => UploadedFile::fake()->image('producto.jpg'),
+            'foto' => $this->jpegUpload('producto.jpg'),
         ])->assertCreated()->json('id');
 
         $photoPath = DB::table('TEC_PRODUCTO')->where('PRO_Producto', $id)->value('PRO_Foto');
@@ -436,7 +521,7 @@ class TechStoreFlowTest extends TestCase
             ->assertJsonFragment([
                 'PRO_Producto' => $id,
                 'PRO_Foto' => $photoPath,
-                'PRO_Foto_URL' => 'http://localhost/storage/'.$photoPath,
+                'PRO_Foto_URL' => url('storage/'.$photoPath),
             ]);
 
         $this->post('/api/catalogos/productos', [
@@ -447,11 +532,47 @@ class TechStoreFlowTest extends TestCase
             'costo' => 10,
             'precio' => 18,
             'existencia_minima' => 0,
-            'foto' => UploadedFile::fake()->image('grande.jpg')->size(3 * 1024),
+            'foto' => $this->jpegUpload('grande.jpg', 3 * 1024),
         ])->assertUnprocessable()
             ->assertJsonPath('errors.foto.0', 'La foto no puede superar los 2 MB.');
 
         $this->assertDatabaseMissing('TEC_PRODUCTO', ['PRO_SKU' => 'TEC-PHOTO-LARGE']);
+    }
+
+    public function test_product_photo_can_be_removed_when_editing(): void
+    {
+        Storage::fake('public');
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+
+        $id = $this->postJson('/api/catalogos/productos', [
+            'categoria_id' => DB::table('TEC_CATEGORIA')->value('CAT_Categoria'),
+            'marca_id' => DB::table('TEC_MARCA')->value('MAR_Marca'),
+            'sku' => 'TEC-PHOTO-DEL',
+            'nombre' => 'Producto para quitar foto',
+            'costo' => 10,
+            'precio' => 18,
+            'existencia_minima' => 0,
+        ])->assertCreated()->json('id');
+
+        Storage::disk('public')->put('products/old.jpg', 'foto');
+        DB::table('TEC_PRODUCTO')->where('PRO_Producto', $id)->update(['PRO_Foto' => 'products/old.jpg']);
+
+        $this->post("/api/catalogos/productos/{$id}", [
+            '_method' => 'PUT',
+            'categoria_id' => DB::table('TEC_CATEGORIA')->value('CAT_Categoria'),
+            'marca_id' => DB::table('TEC_MARCA')->value('MAR_Marca'),
+            'sku' => 'TEC-PHOTO-DEL',
+            'nombre' => 'Producto para quitar foto',
+            'costo' => 10,
+            'precio' => 18,
+            'existencia_minima' => 0,
+            'existencia' => 0,
+            'quitar_foto' => 1,
+        ])->assertOk();
+
+        $this->assertNull(DB::table('TEC_PRODUCTO')->where('PRO_Producto', $id)->value('PRO_Foto'));
+        Storage::disk('public')->assertMissing('products/old.jpg');
     }
 
     public function test_dashboard_exposes_five_indicators_and_report_pdf_is_downloadable(): void
@@ -490,7 +611,9 @@ class TechStoreFlowTest extends TestCase
         $this->postJson('/api/login', [
             'correo' => 'operador@techstore.test',
             'contrasena' => 'TechStore2026!',
-        ])->assertStatus(423);
+        ])->assertUnprocessable()->assertJson([
+            'message' => 'Inténtelo más tarde.',
+        ]);
 
         $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
         $operator = User::where('USU_Correo', 'operador@techstore.test')->firstOrFail();
@@ -685,6 +808,20 @@ class TechStoreFlowTest extends TestCase
             'ROL_Rol' => $adminRole,
             'PER_Permiso' => $userPermission,
         ]);
+    }
+
+    private function jpegUpload(string $filename, int $kilobytes = 8): UploadedFile
+    {
+        $jpeg = base64_decode(''
+            .'/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB'
+            .'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEB'
+            .'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDAREA'
+            .'AhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMB'
+            .'AAIQAxAAAAGf/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPwB//9k=');
+        $path = sys_get_temp_dir().DIRECTORY_SEPARATOR.uniqid('techstore_', true).'.jpg';
+        file_put_contents($path, $jpeg.str_repeat("\0", max(0, ($kilobytes * 1024) - strlen($jpeg))));
+
+        return new UploadedFile($path, $filename, 'image/jpeg', null, true);
     }
 
     private function createApprovedOrder(User $user): int

@@ -151,16 +151,20 @@ class CatalogController extends ApiController
         $data = $this->validatedData($request, $type, $id);
         $existencia = $type === 'productos' ? $data['existencia'] ?? null : null;
         unset($data['existencia']);
+        unset($data['PRO_Estado']);
+        $canAdjustStock = in_array('INVENTARIO.AJUSTAR', $this->effectivePermissionCodes($request->user()), true);
         $oldPhoto = $type === 'productos' ? $record->PRO_Foto : null;
         if ($type === 'productos' && $request->hasFile('foto')) {
             $data['PRO_Foto'] = $this->storeProductPhoto($request);
+        } elseif ($type === 'productos' && $request->boolean('quitar_foto')) {
+            $data['PRO_Foto'] = null;
         }
         $data['updated_at'] = now();
 
         try {
-            DB::transaction(function () use ($request, $config, $id, $data, $type, $existencia) {
+            DB::transaction(function () use ($request, $config, $id, $data, $type, $existencia, $canAdjustStock) {
                 DB::table($config['table'])->where($config['key'], $id)->update($data);
-                if ($type === 'productos' && $existencia !== null) {
+                if ($type === 'productos' && $canAdjustStock && $existencia !== null) {
                     $this->setProductStock($request, $id, (int) $existencia);
                 }
             });
@@ -172,7 +176,7 @@ class CatalogController extends ApiController
         }
 
         if ($type === 'productos') {
-            if (isset($data['PRO_Foto']) && $oldPhoto) {
+            if (array_key_exists('PRO_Foto', $data) && $oldPhoto && $oldPhoto !== $data['PRO_Foto']) {
                 $this->deleteProductPhoto($oldPhoto);
             }
             $this->syncAlert($id);
@@ -463,8 +467,11 @@ class CatalogController extends ApiController
             'PRO_Costo' => $data['costo'],
             'PRO_Precio' => $data['precio'],
             'PRO_Existencia_Minima' => $data['existencia_minima'],
-            'PRO_Estado' => true,
         ];
+
+        if ($id === null) {
+            $payload['PRO_Estado'] = true;
+        }
 
         if ($id !== null && array_key_exists('existencia', $data) && $data['existencia'] !== null) {
             $payload['existencia'] = (int) $data['existencia'];

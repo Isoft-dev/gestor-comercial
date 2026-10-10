@@ -7,6 +7,5 @@ const quetzales = new Intl.NumberFormat('es-GT', {
 
 export function formatCurrency(value) {
   const amount = Number(value)
-  if (!Number.isFinite(amount)) throw new TypeError('Currency amount must be a finite number.')
-  return quetzales.format(amount)
+  return quetzales.format(Number.isFinite(amount) ? amount : 0)
 }

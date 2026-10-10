@@ -1,11 +1,11 @@
 import { formatCurrency } from './currency'
 
 export const chartTheme = {
-  teal: '#0f766e',
-  tealFill: 'rgba(15, 118, 110, 0.16)',
-  amber: '#c2410c',
-  muted: '#6b6156',
-  grid: '#efe6d8',
+  teal: '#c47a12',
+  tealFill: 'rgba(196, 122, 18, 0.16)',
+  amber: '#3554c2',
+  muted: '#5b6576',
+  grid: '#dce2ea',
 }
 
 export function chartDefaults({ currency = false } = {}) {
@@ -18,7 +18,7 @@ export function chartDefaults({ currency = false } = {}) {
     },
     scales: {
       x: {
-        ticks: { color: chartTheme.muted, font: { family: 'Manrope', size: 11 }, maxRotation: 0 },
+        ticks: { color: chartTheme.muted, font: { family: 'Barlow', size: 12 }, maxRotation: 0 },
         grid: { display: false },
         offset: true,
       },
@@ -39,7 +39,7 @@ export function chartDefaults({ currency = false } = {}) {
 export function barStyle(color) {
   return {
     backgroundColor: color,
-    borderRadius: 8,
+    borderRadius: 2,
     maxBarThickness: 48,
     categoryPercentage: 0.6,
     barPercentage: 0.85,
