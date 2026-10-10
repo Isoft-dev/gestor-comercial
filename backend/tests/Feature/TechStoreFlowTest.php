@@ -6,8 +6,10 @@ use App\Models\User;
 use App\Support\Catalogos;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class TechStoreFlowTest extends TestCase
@@ -406,6 +408,50 @@ class TechStoreFlowTest extends TestCase
             ->assertJsonPath('errors.precio.0', 'El precio de venta debe ser mayor que el costo del producto.');
 
         $this->assertDatabaseMissing('TEC_PRODUCTO', ['PRO_SKU' => 'TEC-EQUAL-001']);
+    }
+
+    public function test_product_id_and_optional_photo_are_available_in_the_catalog(): void
+    {
+        Storage::fake('public');
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+
+        $id = $this->post('/api/catalogos/productos', [
+            'categoria_id' => DB::table('TEC_CATEGORIA')->value('CAT_Categoria'),
+            'marca_id' => DB::table('TEC_MARCA')->value('MAR_Marca'),
+            'sku' => 'TEC-PHOTO-001',
+            'nombre' => 'Producto con foto',
+            'costo' => 10,
+            'precio' => 18,
+            'existencia_minima' => 0,
+            'foto' => UploadedFile::fake()->image('producto.jpg'),
+        ])->assertCreated()->json('id');
+
+        $photoPath = DB::table('TEC_PRODUCTO')->where('PRO_Producto', $id)->value('PRO_Foto');
+        $this->assertNotEmpty($photoPath);
+        Storage::disk('public')->assertExists($photoPath);
+
+        $this->getJson('/api/catalogos/productos?buscar='.$id)
+            ->assertOk()
+            ->assertJsonFragment([
+                'PRO_Producto' => $id,
+                'PRO_Foto' => $photoPath,
+                'PRO_Foto_URL' => 'http://localhost/storage/'.$photoPath,
+            ]);
+
+        $this->post('/api/catalogos/productos', [
+            'categoria_id' => DB::table('TEC_CATEGORIA')->value('CAT_Categoria'),
+            'marca_id' => DB::table('TEC_MARCA')->value('MAR_Marca'),
+            'sku' => 'TEC-PHOTO-LARGE',
+            'nombre' => 'Producto con foto grande',
+            'costo' => 10,
+            'precio' => 18,
+            'existencia_minima' => 0,
+            'foto' => UploadedFile::fake()->image('grande.jpg')->size(3 * 1024),
+        ])->assertUnprocessable()
+            ->assertJsonPath('errors.foto.0', 'La foto no puede superar los 2 MB.');
+
+        $this->assertDatabaseMissing('TEC_PRODUCTO', ['PRO_SKU' => 'TEC-PHOTO-LARGE']);
     }
 
     public function test_dashboard_exposes_five_indicators_and_report_pdf_is_downloadable(): void

@@ -2,6 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm, askPrompt } from '../lib/dialog'
+import { formatCurrency } from '../lib/currency'
 import { useAuthStore } from '../stores/auth'
 import { Ban, Check, CircleAlert, CircleCheck, ClipboardList, Plus, ShoppingBag, X } from '@lucide/vue'
 
@@ -93,7 +94,7 @@ onMounted(load)
       <div class="panel-heading"><ClipboardList :size="18" /><h2>Pedidos recientes</h2></div>
       <div class="table-wrap"><table><thead><tr><th>#</th><th>Cliente</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead>
         <tbody><tr v-for="order in orders" :key="order.PED_Pedido">
-          <td class="mono">{{ order.PED_Pedido }}</td><td>{{ order.CLI_Primer_Nombre }} {{ order.CLI_Primer_Apellido }}</td><td class="mono">${{ order.PED_Total }}</td><td><span class="status" :data-state="order.PED_Estado">{{ order.PED_Estado }}</span></td>
+          <td class="mono">{{ order.PED_Pedido }}</td><td>{{ order.CLI_Primer_Nombre }} {{ order.CLI_Primer_Apellido }}</td><td class="mono">{{ formatCurrency(order.PED_Total) }}</td><td><span class="status" :data-state="order.PED_Estado">{{ order.PED_Estado }}</span></td>
           <td class="actions">
             <button v-if="['CREADO', 'APROBADO'].includes(order.PED_Estado)" class="link" type="button" @click="action(`/pedidos/${order.PED_Pedido}/avanzar`)"><Check :size="14" /> Avanzar</button>
             <template v-if="order.PED_Estado === 'PENDIENTE_APROBACION' && auth.can('PEDIDOS.APROBAR')">

@@ -1,3 +1,5 @@
+import { formatCurrency } from './currency'
+
 export const chartTheme = {
   teal: '#0f766e',
   tealFill: 'rgba(15, 118, 110, 0.16)',
@@ -6,7 +8,7 @@ export const chartTheme = {
   grid: '#efe6d8',
 }
 
-export function chartDefaults() {
+export function chartDefaults({ currency = false } = {}) {
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -23,7 +25,11 @@ export function chartDefaults() {
       y: {
         beginAtZero: true,
         grace: '12%',
-        ticks: { color: chartTheme.muted, font: { family: 'IBM Plex Mono', size: 11 } },
+        ticks: {
+          color: chartTheme.muted,
+          font: { family: 'IBM Plex Mono', size: 11 },
+          ...(currency ? { callback: (value) => formatCurrency(value) } : {}),
+        },
         grid: { color: chartTheme.grid },
       },
     },

@@ -9,7 +9,11 @@ use App\Support\PasswordRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use RuntimeException;
+use Throwable;
 
 class CatalogController extends ApiController
 {
@@ -41,6 +45,9 @@ class CatalogController extends ApiController
                 $query->where(function ($builder) use ($search) {
                     $builder->where('TEC_PRODUCTO.PRO_Nombre', 'like', "%{$search}%")
                         ->orWhere('TEC_PRODUCTO.PRO_SKU', 'like', "%{$search}%");
+                    if (ctype_digit($search)) {
+                        $builder->orWhere('TEC_PRODUCTO.PRO_Producto', (int) $search);
+                    }
                 });
             } else {
                 $query->where($config['name'], 'like', "%{$search}%");
@@ -59,6 +66,7 @@ class CatalogController extends ApiController
                     'TEC_PRODUCTO.PRO_SKU',
                     'TEC_PRODUCTO.PRO_Nombre',
                     'TEC_PRODUCTO.PRO_Descripcion',
+                    'TEC_PRODUCTO.PRO_Foto',
                     'TEC_PRODUCTO.PRO_Costo',
                     'TEC_PRODUCTO.PRO_Precio',
                     'TEC_PRODUCTO.PRO_Existencia_Minima',
@@ -70,6 +78,16 @@ class CatalogController extends ApiController
         }
 
         $page = $query->orderBy($config['name'])->paginate(min((int) $request->query('por_pagina', 20), 100));
+        if ($type === 'productos') {
+            $storageBaseUrl = rtrim($request->getSchemeAndHttpHost(), '/').'/storage/';
+            $page->getCollection()->transform(function ($product) use ($storageBaseUrl) {
+                $product->PRO_Foto_URL = $product->PRO_Foto
+                    ? $storageBaseUrl.ltrim($product->PRO_Foto, '/')
+                    : null;
+
+                return $product;
+            });
+        }
         if (! $request->boolean('con_opciones') || $type !== 'productos') {
             return response()->json($page);
         }
@@ -92,22 +110,32 @@ class CatalogController extends ApiController
         $this->requirePermission($request, $type === 'clientes' ? 'CLIENTES.GESTIONAR' : 'CATALOGOS.GESTIONAR');
         $config = $this->config($type);
         $data = $this->validatedData($request, $type);
+        if ($type === 'productos' && $request->hasFile('foto')) {
+            $data['PRO_Foto'] = $this->storeProductPhoto($request);
+        }
         $data['created_at'] = now();
         $data['updated_at'] = now();
 
-        $id = DB::transaction(function () use ($config, $data, $type) {
-            $id = DB::table($config['table'])->insertGetId($data, $config['key']);
-            if ($type === 'productos') {
-                DB::table('TEC_INVENTARIO')->insert([
-                    'PRO_Producto' => $id,
-                    'INV_Existencia' => 0,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-            }
+        try {
+            $id = DB::transaction(function () use ($config, $data, $type) {
+                $id = DB::table($config['table'])->insertGetId($data, $config['key']);
+                if ($type === 'productos') {
+                    DB::table('TEC_INVENTARIO')->insert([
+                        'PRO_Producto' => $id,
+                        'INV_Existencia' => 0,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
 
-            return $id;
-        });
+                return $id;
+            });
+        } catch (Throwable $exception) {
+            if (isset($data['PRO_Foto'])) {
+                $this->deleteProductPhoto($data['PRO_Foto']);
+            }
+            throw $exception;
+        }
 
         $this->audit($request, strtoupper($type), 'CREAR', $id, $data);
 
@@ -118,20 +146,35 @@ class CatalogController extends ApiController
     {
         $this->requirePermission($request, $type === 'clientes' ? 'CLIENTES.GESTIONAR' : 'CATALOGOS.GESTIONAR');
         $config = $this->config($type);
-        abort_unless(DB::table($config['table'])->where($config['key'], $id)->exists(), 404, 'Registro no encontrado.');
+        $record = DB::table($config['table'])->where($config['key'], $id)->first();
+        abort_unless($record, 404, 'Registro no encontrado.');
         $data = $this->validatedData($request, $type, $id);
         $existencia = $type === 'productos' ? $data['existencia'] ?? null : null;
         unset($data['existencia']);
+        $oldPhoto = $type === 'productos' ? $record->PRO_Foto : null;
+        if ($type === 'productos' && $request->hasFile('foto')) {
+            $data['PRO_Foto'] = $this->storeProductPhoto($request);
+        }
         $data['updated_at'] = now();
 
-        DB::transaction(function () use ($request, $config, $id, $data, $type, $existencia) {
-            DB::table($config['table'])->where($config['key'], $id)->update($data);
-            if ($type === 'productos' && $existencia !== null) {
-                $this->setProductStock($request, $id, (int) $existencia);
+        try {
+            DB::transaction(function () use ($request, $config, $id, $data, $type, $existencia) {
+                DB::table($config['table'])->where($config['key'], $id)->update($data);
+                if ($type === 'productos' && $existencia !== null) {
+                    $this->setProductStock($request, $id, (int) $existencia);
+                }
+            });
+        } catch (Throwable $exception) {
+            if (isset($data['PRO_Foto'])) {
+                $this->deleteProductPhoto($data['PRO_Foto']);
             }
-        });
+            throw $exception;
+        }
 
         if ($type === 'productos') {
+            if (isset($data['PRO_Foto']) && $oldPhoto) {
+                $this->deleteProductPhoto($oldPhoto);
+            }
             $this->syncAlert($id);
         }
         $this->audit($request, strtoupper($type), 'MODIFICAR', $id, $data);
@@ -401,9 +444,14 @@ class CatalogController extends ApiController
             'precio' => ['required', 'numeric', 'gt:costo'],
             'existencia_minima' => ['required', 'integer', 'min:0'],
             'existencia' => ['nullable', 'integer', 'min:0'],
+            'foto' => ['nullable', 'image', 'mimes:jpeg,png,webp', 'max:2048'],
         ], [
             ...FieldRules::messages(),
             'precio.gt' => 'El precio de venta debe ser mayor que el costo del producto.',
+            'foto.upload' => 'La foto no se pudo cargar. Verifique que pese menos de 2 MB e inténtelo de nuevo.',
+            'foto.image' => 'El archivo seleccionado debe ser una imagen.',
+            'foto.mimes' => 'La foto debe estar en formato JPG, PNG o WebP.',
+            'foto.max' => 'La foto no puede superar los 2 MB.',
         ]);
 
         $payload = [
@@ -423,6 +471,23 @@ class CatalogController extends ApiController
         }
 
         return $payload;
+    }
+
+    private function storeProductPhoto(Request $request): string
+    {
+        $path = $request->file('foto')->store('products', 'public');
+        if (! is_string($path)) {
+            throw new RuntimeException('No fue posible guardar la foto del producto.');
+        }
+
+        return $path;
+    }
+
+    private function deleteProductPhoto(string $path): void
+    {
+        if (! Storage::disk('public')->delete($path)) {
+            Log::warning('No fue posible eliminar una foto de producto.', ['path' => $path]);
+        }
     }
 
     private function setProductStock(Request $request, int $productId, int $after): void

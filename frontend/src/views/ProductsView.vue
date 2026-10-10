@@ -2,6 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
+import { formatCurrency } from '../lib/currency'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { Ban, CircleAlert, CircleCheck, Package, Pencil, Save, Search, X } from '@lucide/vue'
@@ -14,7 +15,12 @@ const search = ref('')
 const message = ref('')
 const error = ref('')
 const editingId = ref(null)
+const photo = ref(null)
+const photoPreview = ref('')
+const photoValidationError = ref('')
+const photoInput = ref(null)
 const form = reactive(emptyForm())
+let photoObjectUrl = null
 
 function emptyForm() {
   return {
@@ -31,8 +37,42 @@ function emptyForm() {
 }
 
 function reset() {
+  if (photoObjectUrl) URL.revokeObjectURL(photoObjectUrl)
+  photoObjectUrl = null
   editingId.value = null
+  photo.value = null
+  photoPreview.value = ''
+  photoValidationError.value = ''
+  if (photoInput.value) photoInput.value.value = ''
   Object.assign(form, emptyForm())
+}
+
+function selectPhoto(event) {
+  const selectedPhoto = event.target.files?.[0] || null
+  if (photoObjectUrl) URL.revokeObjectURL(photoObjectUrl)
+  photoObjectUrl = null
+  photoValidationError.value = ''
+
+  if (selectedPhoto && selectedPhoto.size > 2 * 1024 * 1024) {
+    photoValidationError.value = 'La foto no puede superar los 2 MB.'
+  } else if (selectedPhoto && !['image/jpeg', 'image/png', 'image/webp'].includes(selectedPhoto.type)) {
+    photoValidationError.value = 'La foto debe estar en formato JPG, PNG o WebP.'
+  }
+
+  if (photoValidationError.value) {
+    photo.value = null
+    event.target.value = ''
+    photoPreview.value = editingId.value
+      ? items.value.find((item) => item.PRO_Producto === editingId.value)?.PRO_Foto_URL || ''
+      : ''
+    error.value = photoValidationError.value
+    return
+  }
+
+  photoObjectUrl = selectedPhoto ? URL.createObjectURL(selectedPhoto) : null
+  photo.value = selectedPhoto
+  photoPreview.value = photoObjectUrl || (editingId.value ? items.value.find((item) => item.PRO_Producto === editingId.value)?.PRO_Foto_URL || '' : '')
+  error.value = ''
 }
 
 async function load() {
@@ -51,13 +91,19 @@ async function load() {
 
 async function submit() {
   message.value = ''
-  error.value = ''
+  error.value = photoValidationError.value
+  if (photoValidationError.value) return
   try {
+    const payload = new FormData()
+    Object.entries(form).forEach(([key, value]) => payload.append(key, String(value)))
+    if (photo.value) payload.append('foto', photo.value)
+
     if (editingId.value) {
-      await api.put(`/catalogos/productos/${editingId.value}`, form)
+      payload.append('_method', 'PUT')
+      await api.post(`/catalogos/productos/${editingId.value}`, payload)
       message.value = 'Producto actualizado correctamente.'
     } else {
-      const { existencia, ...payload } = form
+      payload.delete('existencia')
       await api.post('/catalogos/productos', payload)
       message.value = 'Producto creado correctamente.'
     }
@@ -69,6 +115,10 @@ async function submit() {
 }
 
 function edit(item) {
+  if (photoObjectUrl) URL.revokeObjectURL(photoObjectUrl)
+  photoObjectUrl = null
+  if (photoInput.value) photoInput.value.value = ''
+  photoValidationError.value = ''
   editingId.value = item.PRO_Producto
   Object.assign(form, {
     sku: item.PRO_SKU,
@@ -81,6 +131,8 @@ function edit(item) {
     categoria_id: item.CAT_Categoria,
     marca_id: item.MAR_Marca,
   })
+  photo.value = null
+  photoPreview.value = item.PRO_Foto_URL || ''
 }
 
 async function deactivate(item) {
@@ -128,7 +180,7 @@ onMounted(load)
   </header>
   <form class="filter-bar" @submit.prevent="load">
     <label>Buscar
-      <input v-model="search" type="search" placeholder="SKU o nombre" />
+      <input v-model="search" type="search" placeholder="ID, SKU o nombre" />
     </label>
     <button class="button primary" type="submit"><Search :size="16" /> Consultar</button>
   </form>
@@ -140,6 +192,7 @@ onMounted(load)
         <Package :size="18" />
         <h2>{{ editingId ? 'Modificar producto' : 'Nuevo producto' }}</h2>
       </div>
+      <p class="muted">{{ editingId ? `ID asignado: ${editingId}` : 'El sistema asignará un ID único al guardar.' }}</p>
       <div class="form-grid">
         <label>SKU<input v-model="form.sku" required maxlength="40" :pattern="fields.codigo.pattern" :title="fields.codigo.title" @input="form.sku = fields.codigo.clean($event.target.value)" /></label>
         <label>Nombre<input v-model="form.nombre" required maxlength="120" :pattern="fields.catalogo.pattern" :title="fields.catalogo.title" @input="form.nombre = fields.catalogo.clean($event.target.value)" /></label>
@@ -155,11 +208,13 @@ onMounted(load)
             <option v-for="item in brands" :key="item.MAR_Marca" :value="item.MAR_Marca">{{ item.MAR_Nombre }}</option>
           </select>
         </label>
-        <label>Costo<input v-model="form.costo" type="number" min="0" step="0.01" required /></label>
-        <label>Precio<input v-model="form.precio" type="number" min="0" step="0.01" required /></label>
+        <label>Costo (Q)<input v-model="form.costo" type="number" min="0" step="0.01" required /></label>
+        <label>Precio (Q)<input v-model="form.precio" type="number" min="0" step="0.01" required /></label>
         <label>Existencia mínima<input v-model="form.existencia_minima" type="number" min="0" step="1" required /></label>
         <label v-if="editingId">Existencia actual<input v-model.number="form.existencia" type="number" min="0" step="1" required /></label>
         <label>Descripción<input v-model="form.descripcion" maxlength="500" :pattern="fields.empresa.pattern" :title="fields.empresa.title" @input="form.descripcion = fields.empresa.clean($event.target.value)" /></label>
+        <label>Foto (opcional)<input ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" @change="selectPhoto" /><small class="muted">JPG, PNG o WebP; máximo 2 MB.</small></label>
+        <div v-if="photoPreview" class="photo-preview"><img :src="photoPreview" alt="Vista previa de la foto del producto" /></div>
       </div>
       <p class="muted">La existencia actual no se edita en este formulario.</p>
       <div class="actions">
@@ -173,6 +228,8 @@ onMounted(load)
         <table>
           <thead>
             <tr>
+              <th>ID</th>
+              <th>Foto</th>
               <th>SKU</th>
               <th>Nombre</th>
               <th>Clasificación</th>
@@ -184,10 +241,15 @@ onMounted(load)
           </thead>
           <tbody>
             <tr v-for="item in items" :key="item.PRO_Producto">
+              <td class="mono">{{ item.PRO_Producto }}</td>
+              <td>
+                <img v-if="item.PRO_Foto_URL" class="product-thumbnail" :src="item.PRO_Foto_URL" :alt="`Foto de ${item.PRO_Nombre}`" loading="lazy" />
+                <span v-else class="muted">Sin foto</span>
+              </td>
               <td class="mono">{{ item.PRO_SKU }}</td>
               <td>{{ item.PRO_Nombre }}</td>
               <td>{{ item.CAT_Nombre }} · {{ item.MAR_Nombre }}</td>
-              <td class="mono">${{ Number(item.PRO_Precio).toFixed(2) }}</td>
+              <td class="mono">{{ formatCurrency(item.PRO_Precio) }}</td>
               <td>{{ item.INV_Existencia }} / mín. {{ item.PRO_Existencia_Minima }}</td>
               <td><span class="status" :class="{ off: !item.PRO_Estado }">{{ item.PRO_Estado ? 'Activo' : 'Inactivo' }}</span></td>
               <td class="actions">

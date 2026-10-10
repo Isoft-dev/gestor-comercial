@@ -116,7 +116,7 @@ class ReportController extends ApiController
             $output = fopen('php://output', 'w');
             fwrite($output, "\xEF\xBB\xBF");
             fputcsv($output, ["Reporte de ventas {$from} a {$to}"]);
-            fputcsv($output, ['Venta', 'Fecha', 'Identificación', 'Cliente', 'Total', 'Pagado', 'Saldo', 'Estado']);
+            fputcsv($output, ['Venta', 'Fecha', 'Identificación', 'Cliente', 'Total (Q)', 'Pagado (Q)', 'Saldo (Q)', 'Estado']);
             foreach ($rows as $row) {
                 fputcsv($output, [
                     $row->VEN_Venta,
@@ -168,21 +168,21 @@ class ReportController extends ApiController
         return match ($tipo) {
             'ventas' => [
                 'titulo' => 'Ventas por fecha',
-                'columnas' => ['Fecha', 'Cantidad', 'Total'],
+                'columnas' => ['Fecha', 'Cantidad', 'Total (Q)'],
                 'filas' => collect($payload['ventas_por_fecha'])->map(fn ($row) => [
                     $row->fecha,
                     $row->cantidad,
-                    number_format((float) $row->total, 2),
+                    'Q '.number_format((float) $row->total, 2),
                 ]),
             ],
             'productos' => [
                 'titulo' => 'Productos más vendidos',
-                'columnas' => ['SKU', 'Producto', 'Unidades', 'Total'],
+                'columnas' => ['SKU', 'Producto', 'Unidades', 'Total (Q)'],
                 'filas' => collect($payload['productos_mas_vendidos'])->map(fn ($row) => [
                     $row->PRO_SKU,
                     $row->PRO_Nombre,
                     $row->cantidad,
-                    number_format((float) $row->total, 2),
+                    'Q '.number_format((float) $row->total, 2),
                 ]),
             ],
             'inventario' => [
@@ -197,11 +197,11 @@ class ReportController extends ApiController
             ],
             'compras' => [
                 'titulo' => 'Compras por proveedor',
-                'columnas' => ['Proveedor', 'Compras', 'Total'],
+                'columnas' => ['Proveedor', 'Compras', 'Total (Q)'],
                 'filas' => collect($payload['compras_por_proveedor'])->map(fn ($row) => [
                     $row->proveedor,
                     $row->cantidad,
-                    number_format((float) $row->total, 2),
+                    'Q '.number_format((float) $row->total, 2),
                 ]),
             ],
         };

@@ -2,6 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
+import { formatCurrency } from '../lib/currency'
 import { CircleAlert, CircleCheck, PackageCheck, Plus, Truck } from '@lucide/vue'
 
 const purchases = ref([])
@@ -70,7 +71,7 @@ onMounted(load)
       <div class="panel-heading"><Plus :size="18" /><h2>Nueva orden</h2></div>
       <label>Proveedor<select v-model="form.proveedor_id" required><option value="">Seleccione</option><option v-for="provider in providers" :key="provider.PRV_Proveedor" :value="provider.PRV_Proveedor">{{ provider.PRV_Razon_Social }}</option></select></label>
       <label>Producto<select v-model="form.producto_id" required><option value="">Seleccione</option><option v-for="product in products" :key="product.PRO_Producto" :value="product.PRO_Producto">{{ product.PRO_SKU }} · {{ product.PRO_Nombre }}</option></select></label>
-      <div class="form-grid"><label>Cantidad<input v-model.number="form.cantidad" type="number" min="1" required /></label><label>Costo unitario<input v-model.number="form.costo_unitario" type="number" min="0.01" step="0.01" required /></label></div>
+      <div class="form-grid"><label>Cantidad<input v-model.number="form.cantidad" type="number" min="1" required /></label><label>Costo unitario (Q)<input v-model.number="form.costo_unitario" type="number" min="0.01" step="0.01" required /></label></div>
       <label>Observación<textarea v-model="form.observacion"></textarea></label>
       <button class="button primary"><Plus :size="16" /> Registrar compra</button>
     </form>
@@ -79,7 +80,7 @@ onMounted(load)
       <div class="table-wrap"><table>
         <thead><tr><th>#</th><th>Proveedor</th><th>Total</th><th>Estado</th><th></th></tr></thead>
         <tbody><tr v-for="purchase in purchases" :key="purchase.COM_Compra">
-          <td class="mono">{{ purchase.COM_Compra }}</td><td>{{ purchase.PRV_Razon_Social }}</td><td class="mono">${{ purchase.COM_Total }}</td><td><span class="status" :data-state="purchase.COM_Estado">{{ purchase.COM_Estado }}</span></td>
+          <td class="mono">{{ purchase.COM_Compra }}</td><td>{{ purchase.PRV_Razon_Social }}</td><td class="mono">{{ formatCurrency(purchase.COM_Total) }}</td><td><span class="status" :data-state="purchase.COM_Estado">{{ purchase.COM_Estado }}</span></td>
           <td><button v-if="purchase.COM_Estado === 'PENDIENTE'" class="link" type="button" @click="receive(purchase.COM_Compra)"><PackageCheck :size="14" /> Recibir</button></td>
         </tr></tbody>
       </table></div>

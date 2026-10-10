@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../services/api'
+import { formatCurrency } from '../lib/currency'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { CircleAlert, CircleCheck, Cpu, Minus, Plus, ShoppingBag, Store, Trash2 } from '@lucide/vue'
@@ -86,7 +87,7 @@ async function submit() {
       ...client,
       detalles: cart.value.map((item) => ({ producto_id: item.id, cantidad: item.cantidad })),
     })
-    message.value = `Pedido #${data.id} por $${Number(data.total).toFixed(2)}. ${data.message}`
+    message.value = `Pedido #${data.id} por ${formatCurrency(data.total)}. ${data.message}`
     cart.value = []
     Object.assign(client, {
       identificacion: '', primer_nombre: '', segundo_nombre: '',
@@ -149,7 +150,7 @@ onMounted(load)
           <h2>{{ item.nombre }}</h2>
           <p class="mono">{{ item.sku }}</p>
           <p class="muted">{{ item.descripcion || 'Accesorio tecnológico disponible para venta.' }}</p>
-          <strong class="product-price">${{ Number(item.precio).toFixed(2) }}</strong>
+          <strong class="product-price">{{ formatCurrency(item.precio) }}</strong>
           <span class="status" :class="{ off: item.existencia <= 0 }">{{ item.existencia > 0 ? `${item.existencia} en stock` : 'Agotado' }}</span>
           <button class="button primary" type="button" :disabled="item.existencia <= 0" @click="add(item)">
             <Plus :size="16" /> {{ inCart(item.id) ? `En pedido (${inCart(item.id).cantidad})` : 'Agregar' }}
@@ -163,7 +164,7 @@ onMounted(load)
           <li v-for="item in cart" :key="item.id">
             <div>
               <strong>{{ item.nombre }}</strong>
-              <span class="mono">${{ (item.precio * item.cantidad).toFixed(2) }}</span>
+              <span class="mono">{{ formatCurrency(item.precio * item.cantidad) }}</span>
             </div>
             <div class="cart-qty">
               <button class="icon-button" type="button" @click="changeQty(item, -1)"><Minus :size="14" /></button>
@@ -173,7 +174,7 @@ onMounted(load)
             </div>
           </li>
         </ul>
-        <p v-if="cart.length" class="product-price">Total ${{ cartTotal.toFixed(2) }}</p>
+        <p v-if="cart.length" class="product-price">Total {{ formatCurrency(cartTotal) }}</p>
         <form v-if="cart.length" class="cart-form" @submit.prevent="submit">
           <label>Identificación<input v-model="client.identificacion" required maxlength="30" :pattern="fields.codigo.pattern" :title="fields.codigo.title" @input="client.identificacion = fields.codigo.clean($event.target.value)" /></label>
           <label>Primer nombre<input v-model="client.primer_nombre" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="client.primer_nombre = fields.persona.clean($event.target.value)" /></label>

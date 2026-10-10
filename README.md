@@ -48,10 +48,20 @@ CREATE DATABASE techstore
 
 `backend/.env` ya apunta a MySQL (`root` sin contraseña). Si tu MySQL tiene clave, cámbiala en `DB_PASSWORD`.
 
+Si la base de datos ya existe, aplica la nueva columna de foto sin borrar los datos y crea el enlace para servir las imágenes:
+
+```powershell
+cd backend
+php -c ..\php.ini artisan migrate
+php -c ..\php.ini artisan storage:link
+```
+
 ```powershell
 cd backend
 php -c ..\php.ini artisan migrate:fresh --seed
 ```
+
+La foto de los productos es opcional. Los archivos se guardan en `backend/storage/app/public/products`; el enlace `backend/public/storage` permite mostrarlos en el sistema.
 
 ## Publicar frontend y Apache
 
@@ -74,10 +84,15 @@ Reinicia Apache y abre `http://techstore.local`.
 Si quieres recarga en caliente, sin Apache:
 
 ```powershell
-cd backend
-php -c ..\php.ini artisan serve
+# Terminal 1: API (el directorio actual debe ser backend\public)
+cd backend\public
+& "C:\PHP\php.exe" -c "..\..\php.ini" -S 127.0.0.1:8000 ..\vendor\laravel\framework\src\Illuminate\Foundation\resources\server.php
+```
 
-cd ..\frontend
+En otra terminal, desde la raíz del repositorio:
+
+```powershell
+cd frontend
 npm run dev
 ```
 

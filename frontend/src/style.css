@@ -439,6 +439,16 @@ textarea { min-height: 80px; resize: vertical; }
 
 .table-wrap { width: 100%; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.product-thumbnail,
+.photo-preview img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.photo-preview { display: flex; align-items: center; }
+.photo-preview img { width: 96px; height: 96px; }
 th {
   padding: 10px 12px;
   color: var(--muted);

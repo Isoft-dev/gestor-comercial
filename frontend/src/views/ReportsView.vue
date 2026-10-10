@@ -3,6 +3,7 @@ import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import Chart from 'chart.js/auto'
 import api from '../services/api'
 import { barStyle, chartDefaults, chartTheme } from '../lib/charts'
+import { formatCurrency } from '../lib/currency'
 import { BarChart3, CircleAlert, Download, FileText, Filter, PackageMinus, ShoppingCart, TrendingUp, Truck } from '@lucide/vue'
 
 const reports = ref(null)
@@ -36,7 +37,7 @@ async function load() {
             ...barStyle(chartTheme.teal),
           }],
         },
-        options: chartDefaults(),
+        options: chartDefaults({ currency: true }),
       })
     }
     if (productsCanvas.value && data.productos_mas_vendidos.length) {
@@ -120,12 +121,12 @@ onUnmounted(() => {
     <section class="report-grid">
       <article class="panel">
         <div class="panel-heading"><TrendingUp :size="18" /><h2>Ventas por fecha</h2></div>
-        <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Cantidad</th><th>Total</th></tr></thead><tbody><tr v-for="row in reports.ventas_por_fecha" :key="row.fecha"><td>{{ row.fecha }}</td><td>{{ row.cantidad }}</td><td class="mono">${{ row.total }}</td></tr></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Cantidad</th><th>Total</th></tr></thead><tbody><tr v-for="row in reports.ventas_por_fecha" :key="row.fecha"><td>{{ row.fecha }}</td><td>{{ row.cantidad }}</td><td class="mono">{{ formatCurrency(row.total) }}</td></tr></tbody></table></div>
         <button class="button secondary" type="button" @click="exportPdf('ventas')"><FileText :size="16" /> Exportar PDF</button>
       </article>
       <article class="panel">
         <div class="panel-heading"><ShoppingCart :size="18" /><h2>Productos más vendidos</h2></div>
-        <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Unidades</th><th>Total</th></tr></thead><tbody><tr v-for="row in reports.productos_mas_vendidos" :key="row.PRO_SKU"><td>{{ row.PRO_Nombre }}</td><td>{{ row.cantidad }}</td><td class="mono">${{ row.total }}</td></tr></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Unidades</th><th>Total</th></tr></thead><tbody><tr v-for="row in reports.productos_mas_vendidos" :key="row.PRO_SKU"><td>{{ row.PRO_Nombre }}</td><td>{{ row.cantidad }}</td><td class="mono">{{ formatCurrency(row.total) }}</td></tr></tbody></table></div>
         <button class="button secondary" type="button" @click="exportPdf('productos')"><FileText :size="16" /> Exportar PDF</button>
       </article>
       <article class="panel">
@@ -135,7 +136,7 @@ onUnmounted(() => {
       </article>
       <article class="panel">
         <div class="panel-heading"><Truck :size="18" /><h2>Compras por proveedor</h2></div>
-        <div class="table-wrap"><table><thead><tr><th>Proveedor</th><th>Compras</th><th>Total</th></tr></thead><tbody><tr v-for="row in reports.compras_por_proveedor" :key="row.proveedor"><td>{{ row.proveedor }}</td><td>{{ row.cantidad }}</td><td class="mono">${{ row.total }}</td></tr></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Proveedor</th><th>Compras</th><th>Total</th></tr></thead><tbody><tr v-for="row in reports.compras_por_proveedor" :key="row.proveedor"><td>{{ row.proveedor }}</td><td>{{ row.cantidad }}</td><td class="mono">{{ formatCurrency(row.total) }}</td></tr></tbody></table></div>
         <button class="button secondary" type="button" @click="exportPdf('compras')"><FileText :size="16" /> Exportar PDF</button>
       </article>
     </section>

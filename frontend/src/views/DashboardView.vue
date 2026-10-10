@@ -3,6 +3,7 @@ import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import Chart from 'chart.js/auto'
 import api from '../services/api'
 import { barStyle, chartDefaults, chartTheme } from '../lib/charts'
+import { formatCurrency } from '../lib/currency'
 import {
   BadgeDollarSign,
   CircleAlert,
@@ -39,12 +40,12 @@ function renderCharts() {
       data: {
         labels: data.value.ventas_por_fecha.map((item) => item.fecha),
         datasets: [{
-          label: 'Ventas',
+          label: 'Ventas (Q)',
           data: data.value.ventas_por_fecha.map((item) => item.total),
           ...barStyle(chartTheme.teal),
         }],
       },
-      options: chartDefaults(),
+      options: chartDefaults({ currency: true }),
     })
   }
   if (productsCanvas.value && data.value.productos_mas_vendidos.length) {
@@ -102,12 +103,12 @@ onUnmounted(() => {
       <article class="metric metric-sales">
         <div class="metric-icon"><BadgeDollarSign :size="18" /></div>
         <span>Ventas del período</span>
-        <strong>${{ Number(data.indicadores.ventas).toFixed(2) }}</strong>
+        <strong>{{ formatCurrency(data.indicadores.ventas) }}</strong>
       </article>
       <article class="metric metric-balance">
         <div class="metric-icon"><Wallet :size="18" /></div>
         <span>Saldo pendiente</span>
-        <strong>${{ Number(data.indicadores.saldo_pendiente).toFixed(2) }}</strong>
+        <strong>{{ formatCurrency(data.indicadores.saldo_pendiente) }}</strong>
       </article>
       <article class="metric metric-pending">
         <div class="metric-icon"><ClipboardClock :size="18" /></div>
@@ -122,7 +123,7 @@ onUnmounted(() => {
       <article class="metric metric-purchases">
         <div class="metric-icon"><ShoppingCart :size="18" /></div>
         <span>Compras del período</span>
-        <strong>${{ Number(data.indicadores.compras).toFixed(2) }}</strong>
+        <strong>{{ formatCurrency(data.indicadores.compras) }}</strong>
       </article>
     </section>
     <p class="muted">Período: {{ data.periodo.desde }} al {{ data.periodo.hasta }}</p>
