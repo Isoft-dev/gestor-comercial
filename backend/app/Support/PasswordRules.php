@@ -15,6 +15,15 @@ class PasswordRules
         ];
     }
 
+    public static function optional(): array
+    {
+        return [
+            'nullable',
+            'string',
+            Password::min(10)->mixedCase()->numbers()->symbols(),
+        ];
+    }
+
     public static function message(): string
     {
         return 'La contraseña debe tener al menos 10 caracteres, una mayúscula, una minúscula, un número y un símbolo.';

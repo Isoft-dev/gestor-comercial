@@ -21,8 +21,8 @@ class RoleController extends ApiController
         }
 
         $roles = $query->get();
-        foreach ($roles as $role) {
-            $role->permisos = $this->permissionCodes((int) $role->ROL_Rol);
+        if (! $request->boolean('compact')) {
+            $this->attachPermissions($roles);
         }
 
         return response()->json($roles);
@@ -122,16 +122,23 @@ class RoleController extends ApiController
         return $role;
     }
 
-    private function permissionCodes(int $roleId): array
+    private function attachPermissions($roles): void
     {
-        return DB::table('TEC_ROL_PERMISO as rp')
+        if ($roles->isEmpty()) {
+            return;
+        }
+
+        $grouped = DB::table('TEC_ROL_PERMISO as rp')
             ->join('TEC_PERMISO as p', 'p.PER_Permiso', '=', 'rp.PER_Permiso')
-            ->where('rp.ROL_Rol', $roleId)
+            ->whereIn('rp.ROL_Rol', $roles->pluck('ROL_Rol'))
             ->where('p.PER_Estado', true)
             ->orderBy('p.PER_Codigo')
-            ->pluck('p.PER_Codigo')
-            ->values()
-            ->all();
+            ->get(['rp.ROL_Rol', 'p.PER_Codigo'])
+            ->groupBy('ROL_Rol');
+
+        foreach ($roles as $role) {
+            $role->permisos = $grouped->get($role->ROL_Rol, collect())->pluck('PER_Codigo')->values()->all();
+        }
     }
 
     private function syncPermissions(int $roleId, array $permissionIds): void

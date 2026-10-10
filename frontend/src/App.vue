@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { esEntregaCierre, moduloEnEntrega } from './config/entrega'
 import { useAuthStore } from './stores/auth'
 import {
   Award,
@@ -8,6 +9,7 @@ import {
   Building2,
   ClipboardList,
   Cpu,
+  House,
   IdCard,
   LayoutDashboard,
   LogOut,
@@ -31,7 +33,9 @@ const menuOpen = ref(false)
 const collapsed = ref(window.innerWidth <= 1179 && window.innerWidth > 767)
 
 const links = computed(() => [
-  { to: '/', label: 'Dashboard', permission: 'REPORTES.CONSULTAR', icon: LayoutDashboard },
+  esEntregaCierre
+    ? { to: '/', label: 'Dashboard', permission: 'REPORTES.CONSULTAR', icon: LayoutDashboard }
+    : { to: '/', label: 'Inicio', icon: House },
   { to: '/clientes', label: 'Clientes', permission: 'CLIENTES.GESTIONAR', icon: IdCard },
   { to: '/productos', label: 'Productos', permission: 'CATALOGOS.GESTIONAR', icon: Package },
   { to: '/categorias', label: 'Categorías', permission: 'CATALOGOS.GESTIONAR', icon: Tags },
@@ -45,7 +49,7 @@ const links = computed(() => [
   { to: '/ventas', label: 'Ventas', permission: ['VENTAS.REGISTRAR', 'PAGOS.REGISTRAR', 'REPORTES.CONSULTAR'], icon: Wallet },
   { to: '/reportes', label: 'Reportes', permission: 'REPORTES.CONSULTAR', icon: BarChart3 },
   { to: '/auditoria', label: 'Bitácora', permission: 'AUDITORIA.CONSULTAR', icon: ShieldCheck },
-].filter((link) => !link.permission || auth.can(link.permission)))
+].filter((link) => moduloEnEntrega(link.to) && (!link.permission || auth.can(link.permission))))
 
 watch(() => route.fullPath, () => {
   menuOpen.value = false
@@ -124,7 +128,7 @@ async function signOut() {
     <main class="content">
       <Suspense>
         <RouterView />
-        <template #fallback><p class="muted">Cargando módulo…</p></template>
+        <template #fallback><p class="muted">Cargando…</p></template>
       </Suspense>
     </main>
   </div>

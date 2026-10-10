@@ -103,7 +103,7 @@ onMounted(load)
 <template>
   <header class="page-header">
     <div>
-      <p class="eyebrow">Módulo obligatorio</p>
+      <p class="eyebrow">Catálogo</p>
       <h1 class="page-title"><Package :size="26" :stroke-width="2" /> Productos</h1>
     </div>
   </header>

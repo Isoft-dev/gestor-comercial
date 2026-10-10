@@ -10,6 +10,6 @@ import { ShieldOff } from '@lucide/vue'
     </div>
   </header>
   <section class="panel">
-    <p>No tiene permiso para ver este módulo. El acceso también está bloqueado en el servidor.</p>
+    <p>No tiene permiso para ver esta sección.</p>
   </section>
 </template>

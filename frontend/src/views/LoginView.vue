@@ -4,8 +4,8 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { Boxes, CircleAlert, Cpu, LockKeyhole, LogIn, Mail, ShieldCheck, Warehouse } from '@lucide/vue'
 
-const correo = ref('admin@techstore.test')
-const contrasena = ref('TechStore2026!')
+const correo = ref('')
+const contrasena = ref('')
 const loading = ref(false)
 const error = ref('')
 const auth = useAuthStore()
@@ -32,22 +32,22 @@ async function submit() {
         <span class="brand-mark"><Cpu :size="20" :stroke-width="2.2" /></span>
         <div>
           <strong>TechStore</strong>
-          <small>Control comercial integrado</small>
+          <small>Gestión comercial</small>
         </div>
       </div>
-      <h1>Inventario, pedidos y cobro en un solo flujo.</h1>
-      <p>Consola para accesorios y periféricos: compras, existencias, aprobaciones y pagos con evidencia.</p>
+      <h1>Clientes, productos y personal en un solo lugar.</h1>
+      <p>Consola para administrar el catálogo y el acceso de la tienda.</p>
       <ul class="login-points">
-        <li><Warehouse :size="18" :stroke-width="2" /> Kardex trazable por movimiento</li>
-        <li><Boxes :size="18" :stroke-width="2" /> Catálogo, compras y ventas conectados</li>
-        <li><ShieldCheck :size="18" :stroke-width="2" /> Roles, descuentos y auditoría</li>
+        <li><Warehouse :size="18" :stroke-width="2" /> Catálogo organizado por categoría y marca</li>
+        <li><Boxes :size="18" :stroke-width="2" /> Clientes y productos siempre a la mano</li>
+        <li><ShieldCheck :size="18" :stroke-width="2" /> Cada usuario ve solo lo que le corresponde</li>
       </ul>
     </section>
     <div class="login-form-wrap">
       <section class="login-panel">
         <div class="brand login-brand">
           <span class="brand-mark"><Cpu :size="20" :stroke-width="2.2" /></span>
-          <div><strong>TechStore</strong><small>Acceso al taller</small></div>
+          <div><strong>TechStore</strong><small>Ingreso al sistema</small></div>
         </div>
         <h1>Iniciar sesión</h1>
         <p class="muted">Utiliza una cuenta activa para continuar.</p>
@@ -70,7 +70,6 @@ async function submit() {
             {{ loading ? 'Validando…' : 'Ingresar' }}
           </button>
         </form>
-        <p class="demo-note">Cuenta demo: admin@techstore.test / TechStore2026!</p>
       </section>
     </div>
   </main>

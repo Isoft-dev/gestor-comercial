@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { esEntregaCierre, moduloEnEntrega } from '../config/entrega'
 import api from '../services/api'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -16,10 +17,19 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function homePath() {
-    if (can('REPORTES.CONSULTAR')) return '/'
-    if (can('PEDIDOS.APROBAR') || can('PEDIDOS.REGISTRAR')) return '/pedidos'
-    if (can('CLIENTES.GESTIONAR')) return '/clientes'
-    return '/'
+    if (!esEntregaCierre) return '/'
+
+    const opciones = [
+      { path: '/', permission: 'REPORTES.CONSULTAR' },
+      { path: '/usuarios', permission: 'USUARIOS.GESTIONAR' },
+      { path: '/clientes', permission: 'CLIENTES.GESTIONAR' },
+      { path: '/productos', permission: 'CATALOGOS.GESTIONAR' },
+      { path: '/pedidos', permission: ['PEDIDOS.APROBAR', 'PEDIDOS.REGISTRAR'] },
+      { path: '/compras', permission: 'COMPRAS.REGISTRAR' },
+      { path: '/reportes', permission: 'REPORTES.CONSULTAR' },
+    ]
+
+    return opciones.find((item) => moduloEnEntrega(item.path) && can(item.permission))?.path || '/clientes'
   }
 
   async function login(correo, contrasena) {
@@ -28,6 +38,12 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = data.usuario
     localStorage.setItem('techstore_token', data.token)
     localStorage.setItem('techstore_user', JSON.stringify(data.usuario))
+  }
+
+  async function refreshProfile() {
+    const { data } = await api.get('/me')
+    user.value = data
+    localStorage.setItem('techstore_user', JSON.stringify(data))
   }
 
   async function logout() {
@@ -41,5 +57,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, token, role, permisos, can, homePath, isAuthenticated, login, logout }
+  return { user, token, role, permisos, can, homePath, isAuthenticated, login, refreshProfile, logout }
 })

@@ -138,8 +138,11 @@ class CatalogController extends ApiController
                 ->join('TEC_ROL as r', 'r.ROL_Rol', '=', 'u.ROL_Rol')
                 ->select(
                     'u.USU_Usuario as id',
+                    'u.ROL_Rol as rol_id',
                     'u.USU_Primer_Nombre as primer_nombre',
+                    'u.USU_Segundo_Nombre as segundo_nombre',
                     'u.USU_Primer_Apellido as primer_apellido',
+                    'u.USU_Segundo_Apellido as segundo_apellido',
                     'u.USU_Correo as correo',
                     'u.USU_Estado as estado',
                     'u.USU_Intentos_Fallidos as intentos',
@@ -179,6 +182,43 @@ class CatalogController extends ApiController
         $this->audit($request, 'USUARIOS', 'CREAR', $user->USU_Usuario);
 
         return response()->json(['id' => $user->USU_Usuario, 'message' => 'Usuario creado.'], 201);
+    }
+
+    public function updateUser(Request $request, int $id): JsonResponse
+    {
+        $this->requirePermission($request, 'USUARIOS.GESTIONAR');
+        $user = User::findOrFail($id);
+        $data = $request->validate([
+            'rol_id' => [
+                'required',
+                'integer',
+                Rule::exists('TEC_ROL', 'ROL_Rol')->where(function ($query) use ($user) {
+                    $query->where('ROL_Estado', true)->orWhere('ROL_Rol', $user->ROL_Rol);
+                }),
+            ],
+            'primer_nombre' => ['required', 'string', 'max:60'],
+            'segundo_nombre' => ['nullable', 'string', 'max:60'],
+            'primer_apellido' => ['required', 'string', 'max:60'],
+            'segundo_apellido' => ['nullable', 'string', 'max:60'],
+            'correo' => ['required', 'email', 'max:120', Rule::unique('TEC_USUARIO', 'USU_Correo')->ignore($id, 'USU_Usuario')],
+            'contrasena' => PasswordRules::optional(),
+        ], [
+            'contrasena' => PasswordRules::message(),
+        ]);
+
+        $user->ROL_Rol = $data['rol_id'];
+        $user->USU_Primer_Nombre = $data['primer_nombre'];
+        $user->USU_Segundo_Nombre = $data['segundo_nombre'] ?? null;
+        $user->USU_Primer_Apellido = $data['primer_apellido'];
+        $user->USU_Segundo_Apellido = $data['segundo_apellido'] ?? null;
+        $user->USU_Correo = $data['correo'];
+        if (! empty($data['contrasena'])) {
+            $user->USU_Contrasena = $data['contrasena'];
+        }
+        $user->save();
+        $this->audit($request, 'USUARIOS', 'MODIFICAR', $id);
+
+        return response()->json(['message' => 'Usuario actualizado.']);
     }
 
     public function toggleUser(Request $request, int $id): JsonResponse

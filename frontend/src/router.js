@@ -1,12 +1,20 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { esEntregaCierre, moduloEnEntrega } from './config/entrega'
 import { useAuthStore } from './stores/auth'
+import HomeView from './views/HomeView.vue'
 import LoginView from './views/LoginView.vue'
 
 const routes = [
   { path: '/login', component: LoginView, meta: { public: true } },
   { path: '/tienda', component: () => import('./views/ShopView.vue'), meta: { public: true } },
   { path: '/acceso-denegado', component: () => import('./views/ForbiddenView.vue') },
-  { path: '/', component: () => import('./views/DashboardView.vue'), meta: { permission: 'REPORTES.CONSULTAR' } },
+  {
+    path: '/',
+    component: esEntregaCierre
+      ? () => import('./views/DashboardView.vue')
+      : HomeView,
+    meta: esEntregaCierre ? { permission: 'REPORTES.CONSULTAR' } : {},
+  },
   { path: '/clientes', component: () => import('./views/ClientsView.vue'), meta: { permission: 'CLIENTES.GESTIONAR' } },
   { path: '/productos', component: () => import('./views/ProductsView.vue'), meta: { permission: 'CATALOGOS.GESTIONAR' } },
   { path: '/categorias', component: () => import('./views/CatalogView.vue'), meta: { permission: 'CATALOGOS.GESTIONAR', catalog: 'categorias' } },
@@ -33,6 +41,7 @@ function allowed(auth, permission) {
 
 router.beforeEach((to) => {
   const auth = useAuthStore()
+  if (!moduloEnEntrega(to.path)) return auth.isAuthenticated ? auth.homePath() : '/login'
   if (!to.meta.public && !auth.isAuthenticated) return '/login'
   if (to.path === '/login' && auth.isAuthenticated) return auth.homePath()
   if (!allowed(auth, to.meta.permission)) return '/acceso-denegado'
