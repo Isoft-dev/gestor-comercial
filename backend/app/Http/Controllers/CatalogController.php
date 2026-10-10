@@ -401,7 +401,10 @@ class CatalogController extends ApiController
             'precio' => ['required', 'numeric', 'gt:costo'],
             'existencia_minima' => ['required', 'integer', 'min:0'],
             'existencia' => ['nullable', 'integer', 'min:0'],
-        ], FieldRules::messages());
+        ], [
+            ...FieldRules::messages(),
+            'precio.gt' => 'El precio de venta debe ser mayor que el costo del producto.',
+        ]);
 
         $payload = [
             'CAT_Categoria' => $data['categoria_id'],

@@ -162,6 +162,7 @@ onMounted(load)
         <label>Descripción<input v-model="form.descripcion" maxlength="500" :pattern="fields.empresa.pattern" :title="fields.empresa.title" @input="form.descripcion = fields.empresa.clean($event.target.value)" /></label>
       </div>
       <p class="muted">{{ editingId ? 'La existencia actual se puede ajustar aquí mientras no esté el módulo de inventario.' : 'Al crear el producto la existencia inicia en 0. Luego puede editarla.' }}</p>
+      <p class="muted">El precio de venta debe ser mayor que el costo.</p>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear producto' }}</button>
         <button v-if="editingId" class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>

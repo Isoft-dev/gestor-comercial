@@ -387,6 +387,27 @@ class TechStoreFlowTest extends TestCase
         ]);
     }
 
+    public function test_product_price_must_be_greater_than_cost_with_a_clear_validation_message(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $category = DB::table('TEC_CATEGORIA')->value('CAT_Categoria');
+        $brand = DB::table('TEC_MARCA')->value('MAR_Marca');
+
+        $this->postJson('/api/catalogos/productos', [
+            'categoria_id' => $category,
+            'marca_id' => $brand,
+            'sku' => 'TEC-EQUAL-001',
+            'nombre' => 'Producto con precio igual al costo',
+            'costo' => 150,
+            'precio' => 150,
+            'existencia_minima' => 0,
+        ])->assertUnprocessable()
+            ->assertJsonPath('errors.precio.0', 'El precio de venta debe ser mayor que el costo del producto.');
+
+        $this->assertDatabaseMissing('TEC_PRODUCTO', ['PRO_SKU' => 'TEC-EQUAL-001']);
+    }
+
     public function test_dashboard_exposes_five_indicators_and_report_pdf_is_downloadable(): void
     {
         $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
