@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import AppDialog from './components/AppDialog.vue'
 import { esEntregaCierre, moduloEnEntrega } from './config/entrega'
 import { useAuthStore } from './stores/auth'
 import {
@@ -15,8 +16,6 @@ import {
   LogOut,
   Menu,
   Package,
-  PanelLeftClose,
-  PanelLeftOpen,
   Shield,
   ShieldCheck,
   Tags,
@@ -78,6 +77,7 @@ async function signOut() {
 </script>
 
 <template>
+  <AppDialog />
   <div v-if="auth.isAuthenticated && !route.meta.public" class="app-shell" :class="{ collapsed }">
     <header class="topbar">
       <button class="icon-button" type="button" aria-label="Abrir menú" @click="menuOpen = true">
@@ -103,9 +103,8 @@ async function signOut() {
             <small>Gestión comercial</small>
           </div>
         </div>
-        <button class="icon-button sidebar-toggle" type="button" :title="collapsed ? 'Expandir menú' : 'Compactar menú'" @click="toggleCollapse">
-          <PanelLeftOpen v-if="collapsed" :size="18" />
-          <PanelLeftClose v-else :size="18" />
+        <button class="icon-button sidebar-toggle" type="button" :title="collapsed ? 'Expandir menú' : 'Compactar menú'" :aria-label="collapsed ? 'Expandir menú' : 'Compactar menú'" @click="toggleCollapse">
+          <Menu :size="20" :stroke-width="2" />
         </button>
       </div>
       <nav>

@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
+import { permisoEnEntrega } from '../config/entrega'
+import { fields } from '../lib/fields'
 import { CircleAlert, CircleCheck, KeyRound, Pencil, Save, Shield, X } from '@lucide/vue'
 
 const roles = ref([])
@@ -14,11 +16,13 @@ const form = reactive({
 })
 
 const groupedPermissions = computed(() => {
-  return permissions.value.reduce((groups, permission) => {
-    groups[permission.PER_Modulo] ??= []
-    groups[permission.PER_Modulo].push(permission)
-    return groups
-  }, {})
+  return permissions.value
+    .filter((permission) => permisoEnEntrega(permission.PER_Codigo))
+    .reduce((groups, permission) => {
+      groups[permission.PER_Modulo] ??= []
+      groups[permission.PER_Modulo].push(permission)
+      return groups
+    }, {})
 })
 
 function reset() {
@@ -34,12 +38,9 @@ function isAdmin(role) {
 async function load() {
   error.value = ''
   try {
-    const [rolesResponse, permissionsResponse] = await Promise.all([
-      api.get('/roles'),
-      api.get('/permisos'),
-    ])
-    roles.value = rolesResponse.data
-    permissions.value = permissionsResponse.data
+    const { data } = await api.get('/roles', { params: { con_permisos: 1 } })
+    roles.value = data.roles
+    permissions.value = data.permisos
   } catch (requestError) {
     error.value = requestError.userMessage
   }
@@ -101,7 +102,15 @@ onMounted(load)
         <h2>{{ editingId ? 'Modificar rol' : 'Nuevo rol' }}</h2>
       </div>
       <label>Nombre del rol
-        <input v-model="form.nombre" required maxlength="30" :disabled="editingId && form.nombre === 'ADMINISTRADOR'" />
+        <input
+          v-model="form.nombre"
+          required
+          maxlength="30"
+          :pattern="fields.persona.pattern"
+          :title="fields.persona.title"
+          :disabled="editingId && form.nombre === 'ADMINISTRADOR'"
+          @input="form.nombre = fields.persona.clean($event.target.value)"
+        />
       </label>
       <div>
         <p class="eyebrow">Permisos</p>

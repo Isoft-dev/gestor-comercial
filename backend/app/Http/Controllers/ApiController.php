@@ -14,14 +14,56 @@ abstract class ApiController extends Controller
 
     protected function requireAnyPermission(Request $request, array $codigos): void
     {
-        $allowed = DB::table('TEC_ROL_PERMISO as rp')
-            ->join('TEC_PERMISO as p', 'p.PER_Permiso', '=', 'rp.PER_Permiso')
-            ->where('rp.ROL_Rol', $request->user()?->ROL_Rol)
-            ->whereIn('p.PER_Codigo', $codigos)
-            ->where('p.PER_Estado', true)
-            ->exists();
+        $user = $request->user();
+        abort_unless($user, 403, 'No posee permisos para consultar este módulo.');
 
+        $token = $user->currentAccessToken();
+        $abilities = is_object($token) ? ($token->abilities ?? null) : null;
+        if (is_array($abilities) && $abilities !== []) {
+            $allowed = collect($codigos)->contains(fn (string $codigo) => $token->can($codigo));
+            abort_unless($allowed, 403, 'No posee permisos para consultar este módulo.');
+
+            return;
+        }
+
+        $allowed = collect($codigos)->intersect($this->permissionCodesForRole((int) $user->ROL_Rol))->isNotEmpty();
         abort_unless($allowed, 403, 'No posee permisos para consultar este módulo.');
+    }
+
+    protected function permissionCodesForRole(int $roleId): array
+    {
+        return DB::table('TEC_ROL_PERMISO as rp')
+            ->join('TEC_PERMISO as p', 'p.PER_Permiso', '=', 'rp.PER_Permiso')
+            ->where('rp.ROL_Rol', $roleId)
+            ->where('p.PER_Estado', true)
+            ->orderBy('p.PER_Codigo')
+            ->pluck('p.PER_Codigo')
+            ->values()
+            ->all();
+    }
+
+    protected function attachGrouped(iterable $parents, string $key, string $relation, $grouped): void
+    {
+        foreach ($parents as $parent) {
+            $parent->{$relation} = $grouped->get($parent->{$key}, collect())->values();
+        }
+    }
+
+    protected function productOptions()
+    {
+        return DB::table('TEC_PRODUCTO as p')
+            ->leftJoin('TEC_INVENTARIO as i', 'i.PRO_Producto', '=', 'p.PRO_Producto')
+            ->where('p.PRO_Estado', true)
+            ->orderBy('p.PRO_Nombre')
+            ->get([
+                'p.PRO_Producto',
+                'p.PRO_SKU',
+                'p.PRO_Nombre',
+                'p.PRO_Costo',
+                'p.PRO_Precio',
+                'p.PRO_Estado',
+                'i.INV_Existencia',
+            ]);
     }
 
     protected function audit(

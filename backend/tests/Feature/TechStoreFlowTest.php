@@ -27,10 +27,15 @@ class TechStoreFlowTest extends TestCase
             'contrasena' => 'incorrecta',
         ])->assertUnprocessable();
 
-        $this->postJson('/api/login', [
+        $login = $this->postJson('/api/login', [
             'correo' => 'admin@techstore.test',
             'contrasena' => 'TechStore2026!',
-        ])->assertOk()->assertJsonStructure(['token', 'usuario' => ['id', 'correo', 'rol', 'permisos']]);
+        ])->assertOk()->assertJsonStructure(['token', 'usuario' => ['id', 'correo', 'rol', 'permisos'], 'inicio']);
+
+        $this->withToken($login->json('token'))
+            ->getJson('/api/inicio')
+            ->assertOk()
+            ->assertJsonStructure(['usuarios', 'clientes', 'productos']);
     }
 
     public function test_complete_commercial_flow_updates_inventory_and_balance(): void
@@ -364,6 +369,22 @@ class TechStoreFlowTest extends TestCase
             'PRO_Producto' => $id,
             'INV_Existencia' => 0,
         ]);
+
+        $this->putJson("/api/catalogos/productos/{$id}", [
+            'categoria_id' => $category,
+            'marca_id' => $brand,
+            'sku' => 'TEC-HUB-001',
+            'nombre' => 'Hub USB 4 puertos',
+            'costo' => 11,
+            'precio' => 19,
+            'existencia_minima' => 4,
+            'existencia' => 12,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('TEC_INVENTARIO', [
+            'PRO_Producto' => $id,
+            'INV_Existencia' => 12,
+        ]);
     }
 
     public function test_dashboard_exposes_five_indicators_and_report_pdf_is_downloadable(): void
@@ -482,6 +503,80 @@ class TechStoreFlowTest extends TestCase
         $this->actingAs($supervisor, 'sanctum');
         $this->getJson('/api/catalogos/clientes')->assertForbidden();
         $this->getJson('/api/usuarios')->assertForbidden();
+    }
+
+    public function test_category_can_be_inactivated(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+
+        $id = $this->postJson('/api/catalogos/categorias', [
+            'nombre' => 'Accesorios',
+        ])->assertCreated()->json('id');
+
+        $this->deleteJson("/api/catalogos/categorias/{$id}")->assertOk();
+        $this->assertDatabaseHas('TEC_CATEGORIA', [
+            'CAT_Categoria' => $id,
+            'CAT_Estado' => false,
+        ]);
+
+        $this->patchJson("/api/catalogos/categorias/{$id}/estado")->assertOk();
+        $this->assertDatabaseHas('TEC_CATEGORIA', [
+            'CAT_Categoria' => $id,
+            'CAT_Estado' => true,
+        ]);
+    }
+
+    public function test_person_name_rejects_symbols(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $role = DB::table('TEC_ROL')->where('ROL_Nombre', 'OPERADOR')->value('ROL_Rol');
+
+        $this->postJson('/api/usuarios', [
+            'rol_id' => $role,
+            'primer_nombre' => 'Juan@',
+            'primer_apellido' => 'Pérez',
+            'correo' => 'juan.simbolos@techstore.test',
+            'contrasena' => 'Password2026!',
+        ])->assertUnprocessable();
+
+        $this->postJson('/api/catalogos/clientes', [
+            'identificacion' => 'DPI-111222',
+            'primer_nombre' => 'Ana#',
+            'primer_apellido' => 'Lopez',
+        ])->assertUnprocessable();
+    }
+
+    public function test_role_permissions_are_limited_to_current_sprint(): void
+    {
+        config(['entrega.actual' => 1]);
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+
+        $this->getJson('/api/roles?con_permisos=1')
+            ->assertOk()
+            ->assertJsonFragment(['PER_Codigo' => 'CLIENTES.GESTIONAR'])
+            ->assertJsonMissing(['PER_Codigo' => 'REPORTES.CONSULTAR']);
+
+        $userPermission = DB::table('TEC_PERMISO')->where('PER_Codigo', 'USUARIOS.GESTIONAR')->value('PER_Permiso');
+        $reportPermission = DB::table('TEC_PERMISO')->where('PER_Codigo', 'REPORTES.CONSULTAR')->value('PER_Permiso');
+        $adminRole = DB::table('TEC_ROL')->where('ROL_Nombre', 'ADMINISTRADOR')->value('ROL_Rol');
+
+        $this->postJson('/api/roles', [
+            'nombre' => 'REPORTERO',
+            'permisos' => [$reportPermission],
+        ])->assertUnprocessable();
+
+        $this->putJson("/api/roles/{$adminRole}", [
+            'nombre' => 'ADMINISTRADOR',
+            'permisos' => [$userPermission],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('TEC_ROL_PERMISO', [
+            'ROL_Rol' => $adminRole,
+            'PER_Permiso' => $reportPermission,
+        ]);
     }
 
     private function createApprovedOrder(User $user): int

@@ -14,14 +14,10 @@ const adjustment = reactive({ producto_id: '', tipo: 'AJUSTE_ENTRADA', cantidad:
 
 async function load() {
   try {
-    const [stockResponse, movementResponse, alertResponse] = await Promise.all([
-      api.get('/inventario'),
-      api.get('/inventario/movimientos'),
-      api.get('/inventario/alertas'),
-    ])
-    stock.value = stockResponse.data.data
-    movements.value = movementResponse.data.data
-    alerts.value = alertResponse.data
+    const { data } = await api.get('/inventario', { params: { completo: 1 } })
+    stock.value = data.stock.data
+    movements.value = data.movimientos.data
+    alerts.value = data.alertas
   } catch (requestError) {
     error.value = requestError.userMessage
   }

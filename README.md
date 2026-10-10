@@ -23,6 +23,10 @@ Vue 3 SPA → Laravel API REST → MySQL
 
 El ambiente local usa **MySQL de XAMPP** y Apache en `http://techstore.local`. `npm run build` deja la SPA dentro de `backend/public`.
 
+## Instalación
+
+La guía para clonar y levantar el proyecto en otro equipo está en [`INSTALACION.md`](INSTALACION.md).
+
 ## Requisitos
 
 - PHP 8.3 o superior. En este equipo se usa `C:\PHP` (8.5), porque XAMPP trae 8.2.

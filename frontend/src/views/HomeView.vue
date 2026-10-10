@@ -16,7 +16,7 @@ import {
 
 const auth = useAuthStore()
 const error = ref('')
-const counts = ref({})
+const counts = ref(auth.inicio && typeof auth.inicio === 'object' ? auth.inicio : {})
 
 const greeting = computed(() => {
   const hour = new Date().getHours()

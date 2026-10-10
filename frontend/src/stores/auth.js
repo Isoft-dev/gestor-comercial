@@ -7,6 +7,7 @@ export const useAuthStore = defineStore('auth', () => {
   const savedUser = localStorage.getItem('techstore_user')
   const user = ref(savedUser ? JSON.parse(savedUser) : null)
   const token = ref(localStorage.getItem('techstore_token'))
+  const inicio = ref(null)
   const isAuthenticated = computed(() => Boolean(token.value))
   const role = computed(() => user.value?.rol || '')
   const permisos = computed(() => user.value?.permisos || [])
@@ -36,6 +37,7 @@ export const useAuthStore = defineStore('auth', () => {
     const { data } = await api.post('/login', { correo, contrasena })
     token.value = data.token
     user.value = data.usuario
+    inicio.value = data.inicio || null
     localStorage.setItem('techstore_token', data.token)
     localStorage.setItem('techstore_user', JSON.stringify(data.usuario))
   }
@@ -52,10 +54,11 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       token.value = null
       user.value = null
+      inicio.value = null
       localStorage.removeItem('techstore_token')
       localStorage.removeItem('techstore_user')
     }
   }
 
-  return { user, token, role, permisos, can, homePath, isAuthenticated, login, refreshProfile, logout }
+  return { user, token, inicio, role, permisos, can, homePath, isAuthenticated, login, refreshProfile, logout }
 })

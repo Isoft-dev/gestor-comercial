@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\Catalogos;
+use App\Support\FieldRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,17 +38,17 @@ class ShopController extends ApiController
     public function order(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'identificacion' => ['required', 'string', 'max:30'],
-            'primer_nombre' => ['required', 'string', 'max:60'],
-            'segundo_nombre' => ['nullable', 'string', 'max:60'],
-            'primer_apellido' => ['required', 'string', 'max:60'],
-            'segundo_apellido' => ['nullable', 'string', 'max:60'],
+            'identificacion' => FieldRules::identification(),
+            'primer_nombre' => FieldRules::personName(),
+            'segundo_nombre' => FieldRules::personName(false),
+            'primer_apellido' => FieldRules::personName(),
+            'segundo_apellido' => FieldRules::personName(false),
             'correo' => ['nullable', 'email', 'max:120'],
-            'telefono' => ['nullable', 'string', 'max:30'],
+            'telefono' => FieldRules::phone(),
             'detalles' => ['required', 'array', 'min:1'],
             'detalles.*.producto_id' => ['required', 'integer', 'distinct', 'exists:TEC_PRODUCTO,PRO_Producto'],
             'detalles.*.cantidad' => ['required', 'integer', 'min:1'],
-        ]);
+        ], FieldRules::messages());
 
         $operatorId = DB::table('TEC_USUARIO as u')
             ->join('TEC_ROL as r', 'r.ROL_Rol', '=', 'u.ROL_Rol')

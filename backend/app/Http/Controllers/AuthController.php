@@ -42,16 +42,21 @@ class AuthController extends ApiController
             return response()->json(['message' => 'Credenciales inválidas.'], 422);
         }
 
-        $user->USU_Intentos_Fallidos = 0;
-        $user->USU_Bloqueado_Hasta = null;
-        $user->save();
-        $user->tokens()->delete();
-        $token = $user->createToken('techstore-web')->plainTextToken;
+        if ($user->USU_Intentos_Fallidos || $user->USU_Bloqueado_Hasta) {
+            $user->USU_Intentos_Fallidos = 0;
+            $user->USU_Bloqueado_Hasta = null;
+            $user->save();
+        }
+
+        $permisos = $this->permissionCodesForRole((int) $user->ROL_Rol);
+        $user->tokens()->where('name', 'techstore-web')->delete();
+        $token = $user->createToken('techstore-web', $permisos)->plainTextToken;
         $this->audit($request, 'ACCESO', 'INICIAR_SESION', $user->USU_Usuario, [], $user->USU_Usuario);
 
         return response()->json([
             'token' => $token,
-            'usuario' => $this->profile($user),
+            'usuario' => $this->profile($user, $permisos),
+            'inicio' => $this->homeCounts($permisos),
         ]);
     }
 
@@ -62,25 +67,9 @@ class AuthController extends ApiController
 
     public function home(Request $request): JsonResponse
     {
-        $codes = DB::table('TEC_ROL_PERMISO as rp')
-            ->join('TEC_PERMISO as p', 'p.PER_Permiso', '=', 'rp.PER_Permiso')
-            ->where('rp.ROL_Rol', $request->user()->ROL_Rol)
-            ->where('p.PER_Estado', true)
-            ->pluck('p.PER_Codigo');
-
-        $counts = [];
-        if ($codes->contains('USUARIOS.GESTIONAR')) {
-            $counts['usuarios'] = DB::table('TEC_USUARIO')->count('USU_Usuario');
-            $counts['roles'] = DB::table('TEC_ROL')->count('ROL_Rol');
-        }
-        if ($codes->contains('CLIENTES.GESTIONAR')) {
-            $counts['clientes'] = DB::table('TEC_CLIENTE')->count('CLI_Cliente');
-        }
-        if ($codes->contains('CATALOGOS.GESTIONAR')) {
-            $counts['productos'] = DB::table('TEC_PRODUCTO')->count('PRO_Producto');
-        }
-
-        return response()->json($counts);
+        return response()->json($this->homeCounts(
+            $this->permissionCodesForRole((int) $request->user()->ROL_Rol)
+        ));
     }
 
     public function logout(Request $request): JsonResponse
@@ -110,17 +99,28 @@ class AuthController extends ApiController
         ], $user->USU_Usuario);
     }
 
-    private function profile(User $user): array
+    private function homeCounts(array $codes): array
+    {
+        $codes = collect($codes);
+        $counts = [];
+        if ($codes->contains('USUARIOS.GESTIONAR')) {
+            $counts['usuarios'] = DB::table('TEC_USUARIO')->count('USU_Usuario');
+            $counts['roles'] = DB::table('TEC_ROL')->count('ROL_Rol');
+        }
+        if ($codes->contains('CLIENTES.GESTIONAR')) {
+            $counts['clientes'] = DB::table('TEC_CLIENTE')->count('CLI_Cliente');
+        }
+        if ($codes->contains('CATALOGOS.GESTIONAR')) {
+            $counts['productos'] = DB::table('TEC_PRODUCTO')->count('PRO_Producto');
+        }
+
+        return $counts;
+    }
+
+    private function profile(User $user, ?array $permisos = null): array
     {
         $role = DB::table('TEC_ROL')->where('ROL_Rol', $user->ROL_Rol)->value('ROL_Nombre');
-        $permisos = DB::table('TEC_ROL_PERMISO as rp')
-            ->join('TEC_PERMISO as p', 'p.PER_Permiso', '=', 'rp.PER_Permiso')
-            ->where('rp.ROL_Rol', $user->ROL_Rol)
-            ->where('p.PER_Estado', true)
-            ->orderBy('p.PER_Codigo')
-            ->pluck('p.PER_Codigo')
-            ->values()
-            ->all();
+        $permisos ??= $this->permissionCodesForRole((int) $user->ROL_Rol);
 
         return [
             'id' => $user->USU_Usuario,

@@ -1,6 +1,8 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
+import { askConfirm } from '../lib/dialog'
+import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { Ban, CircleAlert, CircleCheck, Package, Pencil, Save, Search, X } from '@lucide/vue'
 
@@ -22,6 +24,7 @@ function emptyForm() {
     costo: 0,
     precio: 0,
     existencia_minima: 0,
+    existencia: 0,
     categoria_id: '',
     marca_id: '',
   }
@@ -35,19 +38,12 @@ function reset() {
 async function load() {
   error.value = ''
   try {
-    const requests = [
-      api.get('/catalogos/productos', { params: { buscar: search.value, por_pagina: 50 } }),
-    ]
-    if (!categories.value.length) {
-      requests.push(
-        api.get('/catalogos/categorias?por_pagina=100'),
-        api.get('/catalogos/marcas?por_pagina=100'),
-      )
-    }
-    const [productResponse, categoryResponse, brandResponse] = await Promise.all(requests)
-    items.value = productResponse.data.data
-    if (categoryResponse) categories.value = categoryResponse.data.data
-    if (brandResponse) brands.value = brandResponse.data.data
+    const params = { buscar: search.value, por_pagina: 50 }
+    if (!categories.value.length || !brands.value.length) params.con_opciones = 1
+    const { data } = await api.get('/catalogos/productos', { params })
+    items.value = data.data
+    if (data.categorias) categories.value = data.categorias
+    if (data.marcas) brands.value = data.marcas
   } catch (requestError) {
     error.value = requestError.userMessage
   }
@@ -61,7 +57,8 @@ async function submit() {
       await api.put(`/catalogos/productos/${editingId.value}`, form)
       message.value = 'Producto actualizado correctamente.'
     } else {
-      await api.post('/catalogos/productos', form)
+      const { existencia, ...payload } = form
+      await api.post('/catalogos/productos', payload)
       message.value = 'Producto creado correctamente.'
     }
     reset()
@@ -80,16 +77,38 @@ function edit(item) {
     costo: item.PRO_Costo,
     precio: item.PRO_Precio,
     existencia_minima: item.PRO_Existencia_Minima,
+    existencia: Number(item.INV_Existencia ?? 0),
     categoria_id: item.CAT_Categoria,
     marca_id: item.MAR_Marca,
   })
 }
 
 async function deactivate(item) {
-  if (!confirm(`¿Desea inactivar ${item.PRO_Nombre}?`)) return
+  await changeState(item, false)
+}
+
+async function activate(item) {
+  await changeState(item, true)
+}
+
+async function changeState(item, active) {
+  const accepted = await askConfirm({
+    title: active ? 'Activar producto' : 'Inactivar producto',
+    message: active
+      ? `¿Desea volver a activar ${item.PRO_Nombre}?`
+      : `¿Desea inactivar ${item.PRO_Nombre}? La existencia se conserva.`,
+    confirmText: active ? 'Activar' : 'Inactivar',
+    tone: active ? 'warning' : 'danger',
+  })
+  if (!accepted) return
   try {
-    await api.delete(`/catalogos/productos/${item.PRO_Producto}`)
-    message.value = 'Producto inactivado. La existencia no se elimina.'
+    if (active) {
+      await api.patch(`/catalogos/productos/${item.PRO_Producto}/estado`)
+      message.value = 'Producto activado.'
+    } else {
+      await api.delete(`/catalogos/productos/${item.PRO_Producto}`)
+      message.value = 'Producto inactivado. La existencia no se elimina.'
+    }
     if (editingId.value === item.PRO_Producto) reset()
     await load()
   } catch (requestError) {
@@ -122,8 +141,8 @@ onMounted(load)
         <h2>{{ editingId ? 'Modificar producto' : 'Nuevo producto' }}</h2>
       </div>
       <div class="form-grid">
-        <label>SKU<input v-model="form.sku" required maxlength="40" /></label>
-        <label>Nombre<input v-model="form.nombre" required maxlength="120" /></label>
+        <label>SKU<input v-model="form.sku" required maxlength="40" :pattern="fields.codigo.pattern" :title="fields.codigo.title" @input="form.sku = fields.codigo.clean($event.target.value)" /></label>
+        <label>Nombre<input v-model="form.nombre" required maxlength="120" :pattern="fields.catalogo.pattern" :title="fields.catalogo.title" @input="form.nombre = fields.catalogo.clean($event.target.value)" /></label>
         <label>Categoría
           <select v-model="form.categoria_id" required>
             <option value="">Seleccione</option>
@@ -139,9 +158,10 @@ onMounted(load)
         <label>Costo<input v-model="form.costo" type="number" min="0" step="0.01" required /></label>
         <label>Precio<input v-model="form.precio" type="number" min="0" step="0.01" required /></label>
         <label>Existencia mínima<input v-model="form.existencia_minima" type="number" min="0" step="1" required /></label>
-        <label>Descripción<input v-model="form.descripcion" /></label>
+        <label v-if="editingId">Existencia actual<input v-model.number="form.existencia" type="number" min="0" step="1" required /></label>
+        <label>Descripción<input v-model="form.descripcion" maxlength="500" :pattern="fields.empresa.pattern" :title="fields.empresa.title" @input="form.descripcion = fields.empresa.clean($event.target.value)" /></label>
       </div>
-      <p class="muted">La existencia actual no se edita en este formulario.</p>
+      <p class="muted">{{ editingId ? 'La existencia actual se puede ajustar aquí mientras no esté el módulo de inventario.' : 'Al crear el producto la existencia inicia en 0. Luego puede editarla.' }}</p>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear producto' }}</button>
         <button v-if="editingId" class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
@@ -172,8 +192,11 @@ onMounted(load)
               <td><span class="status" :class="{ off: !item.PRO_Estado }">{{ item.PRO_Estado ? 'Activo' : 'Inactivo' }}</span></td>
               <td class="actions">
                 <button class="link" type="button" @click="edit(item)"><Pencil :size="14" /> Editar</button>
-                <button v-if="item.PRO_Estado && auth.can('CATALOGOS.INACTIVAR')" class="link danger" type="button" @click="deactivate(item)">
+                <button v-if="item.PRO_Estado && auth.can(['CATALOGOS.INACTIVAR', 'CATALOGOS.GESTIONAR'])" class="link danger" type="button" @click="deactivate(item)">
                   <Ban :size="14" /> Inactivar
+                </button>
+                <button v-else-if="!item.PRO_Estado && auth.can(['CATALOGOS.INACTIVAR', 'CATALOGOS.GESTIONAR'])" class="link" type="button" @click="activate(item)">
+                  <CircleCheck :size="14" /> Activar
                 </button>
               </td>
             </tr>

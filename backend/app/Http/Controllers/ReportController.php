@@ -18,9 +18,10 @@ class ReportController extends ApiController
         $this->requirePermission($request, 'REPORTES.CONSULTAR');
         $from = $request->query('desde', now()->startOfMonth()->toDateString());
         $to = $request->query('hasta', now()->toDateString());
+        [$start, $end] = $this->periodBounds($from, $to);
 
-        $sales = DB::table('TEC_VENTA')->whereBetween(DB::raw('DATE(VEN_Fecha)'), [$from, $to]);
-        $purchases = DB::table('TEC_COMPRA')->whereBetween(DB::raw('DATE(COM_Fecha)'), [$from, $to]);
+        $sales = DB::table('TEC_VENTA')->whereBetween('VEN_Fecha', [$start, $end]);
+        $purchases = DB::table('TEC_COMPRA')->whereBetween('COM_Fecha', [$start, $end]);
 
         return response()->json([
             'periodo' => ['desde' => $from, 'hasta' => $to],
@@ -34,7 +35,7 @@ class ReportController extends ApiController
                 'compras' => (float) $purchases->sum('COM_Total'),
             ],
             'ventas_por_fecha' => DB::table('TEC_VENTA')
-                ->whereBetween(DB::raw('DATE(VEN_Fecha)'), [$from, $to])
+                ->whereBetween('VEN_Fecha', [$start, $end])
                 ->selectRaw('DATE(VEN_Fecha) as fecha, SUM(VEN_Total) as total')
                 ->groupByRaw('DATE(VEN_Fecha)')
                 ->orderBy('fecha')
@@ -91,11 +92,12 @@ class ReportController extends ApiController
         $this->requirePermission($request, 'REPORTES.CONSULTAR');
         $from = $request->query('desde', now()->startOfMonth()->toDateString());
         $to = $request->query('hasta', now()->toDateString());
+        [$start, $end] = $this->periodBounds($from, $to);
         $rows = DB::table('TEC_VENTA as v')
             ->join('TEC_PEDIDO as p', 'p.PED_Pedido', '=', 'v.PED_Pedido')
             ->join('TEC_CLIENTE as c', 'c.CLI_Cliente', '=', 'p.CLI_Cliente')
             ->join('TEC_ESTADO_PAGO as ep', 'ep.EPA_Estado_Pago', '=', 'v.EPA_Estado_Pago')
-            ->whereBetween(DB::raw('DATE(v.VEN_Fecha)'), [$from, $to])
+            ->whereBetween('v.VEN_Fecha', [$start, $end])
             ->select(
                 'v.VEN_Venta',
                 'v.VEN_Fecha',
@@ -133,11 +135,13 @@ class ReportController extends ApiController
 
     private function reportPayload(string $from, string $to): array
     {
+        [$start, $end] = $this->periodBounds($from, $to);
+
         return [
             'generado_en' => now()->toDateTimeString(),
             'filtros' => ['desde' => $from, 'hasta' => $to],
             'ventas_por_fecha' => DB::table('TEC_VENTA')
-                ->whereBetween(DB::raw('DATE(VEN_Fecha)'), [$from, $to])
+                ->whereBetween('VEN_Fecha', [$start, $end])
                 ->selectRaw('DATE(VEN_Fecha) as fecha, COUNT(VEN_Venta) as cantidad, SUM(VEN_Total) as total')
                 ->groupByRaw('DATE(VEN_Fecha)')
                 ->orderBy('fecha')
@@ -151,7 +155,7 @@ class ReportController extends ApiController
                 ->get(),
             'compras_por_proveedor' => DB::table('TEC_COMPRA as c')
                 ->join('TEC_PROVEEDOR as p', 'p.PRV_Proveedor', '=', 'c.PRV_Proveedor')
-                ->whereBetween(DB::raw('DATE(c.COM_Fecha)'), [$from, $to])
+                ->whereBetween('c.COM_Fecha', [$start, $end])
                 ->selectRaw('p.PRV_Razon_Social as proveedor, COUNT(c.COM_Compra) as cantidad, SUM(c.COM_Total) as total')
                 ->groupBy('p.PRV_Proveedor', 'p.PRV_Razon_Social')
                 ->orderByDesc('total')
@@ -203,12 +207,19 @@ class ReportController extends ApiController
         };
     }
 
+    private function periodBounds(string $from, string $to): array
+    {
+        return [$from.' 00:00:00', $to.' 23:59:59'];
+    }
+
     private function bestSellers(string $from, string $to, int $limit)
     {
+        [$start, $end] = $this->periodBounds($from, $to);
+
         return DB::table('TEC_DETALLE_VENTA as d')
             ->join('TEC_VENTA as v', 'v.VEN_Venta', '=', 'd.VEN_Venta')
             ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'd.PRO_Producto')
-            ->whereBetween(DB::raw('DATE(v.VEN_Fecha)'), [$from, $to])
+            ->whereBetween('v.VEN_Fecha', [$start, $end])
             ->selectRaw('p.PRO_SKU, p.PRO_Nombre, SUM(d.DVE_Cantidad) as cantidad, SUM(d.DVE_Subtotal) as total')
             ->groupBy('p.PRO_Producto', 'p.PRO_SKU', 'p.PRO_Nombre')
             ->orderByDesc('cantidad')

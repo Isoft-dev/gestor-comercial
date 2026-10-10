@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../services/api'
+import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { CircleAlert, CircleCheck, Cpu, Minus, Plus, ShoppingBag, Store, Trash2 } from '@lucide/vue'
 
@@ -174,11 +175,11 @@ onMounted(load)
         </ul>
         <p v-if="cart.length" class="product-price">Total ${{ cartTotal.toFixed(2) }}</p>
         <form v-if="cart.length" class="cart-form" @submit.prevent="submit">
-          <label>Identificación<input v-model="client.identificacion" required maxlength="30" /></label>
-          <label>Primer nombre<input v-model="client.primer_nombre" required maxlength="60" /></label>
-          <label>Primer apellido<input v-model="client.primer_apellido" required maxlength="60" /></label>
+          <label>Identificación<input v-model="client.identificacion" required maxlength="30" :pattern="fields.codigo.pattern" :title="fields.codigo.title" @input="client.identificacion = fields.codigo.clean($event.target.value)" /></label>
+          <label>Primer nombre<input v-model="client.primer_nombre" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="client.primer_nombre = fields.persona.clean($event.target.value)" /></label>
+          <label>Primer apellido<input v-model="client.primer_apellido" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="client.primer_apellido = fields.persona.clean($event.target.value)" /></label>
           <label>Correo<input v-model="client.correo" type="email" /></label>
-          <label>Teléfono<input v-model="client.telefono" /></label>
+          <label>Teléfono<input v-model="client.telefono" :pattern="fields.telefono.pattern" :title="fields.telefono.title" @input="client.telefono = fields.telefono.clean($event.target.value)" /></label>
           <button class="button primary" :disabled="sending">
             <ShoppingBag :size="16" /> {{ sending ? 'Registrando…' : 'Confirmar pedido' }}
           </button>

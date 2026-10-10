@@ -37,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/catalogos/{type}', [CatalogController::class, 'store']);
     Route::put('/catalogos/{type}/{id}', [CatalogController::class, 'update']);
     Route::delete('/catalogos/{type}/{id}', [CatalogController::class, 'destroy']);
+    Route::patch('/catalogos/{type}/{id}/estado', [CatalogController::class, 'activate']);
 
     Route::get('/compras', [PurchaseController::class, 'index']);
     Route::post('/compras', [PurchaseController::class, 'store']);

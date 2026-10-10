@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Support\Catalogos;
+use App\Support\FieldRules;
 use App\Support\PasswordRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,16 +53,38 @@ class CatalogController extends ApiController
                 ->leftJoin('TEC_MARCA', 'TEC_MARCA.MAR_Marca', '=', 'TEC_PRODUCTO.MAR_Marca')
                 ->leftJoin('TEC_INVENTARIO', 'TEC_INVENTARIO.PRO_Producto', '=', 'TEC_PRODUCTO.PRO_Producto')
                 ->select(
-                    'TEC_PRODUCTO.*',
+                    'TEC_PRODUCTO.PRO_Producto',
+                    'TEC_PRODUCTO.CAT_Categoria',
+                    'TEC_PRODUCTO.MAR_Marca',
+                    'TEC_PRODUCTO.PRO_SKU',
+                    'TEC_PRODUCTO.PRO_Nombre',
+                    'TEC_PRODUCTO.PRO_Descripcion',
+                    'TEC_PRODUCTO.PRO_Costo',
+                    'TEC_PRODUCTO.PRO_Precio',
+                    'TEC_PRODUCTO.PRO_Existencia_Minima',
+                    'TEC_PRODUCTO.PRO_Estado',
                     'TEC_CATEGORIA.CAT_Nombre',
                     'TEC_MARCA.MAR_Nombre',
                     'TEC_INVENTARIO.INV_Existencia',
                 );
         }
 
-        return response()->json(
-            $query->orderBy($config['name'])->paginate(min((int) $request->query('por_pagina', 20), 100))
-        );
+        $page = $query->orderBy($config['name'])->paginate(min((int) $request->query('por_pagina', 20), 100));
+        if (! $request->boolean('con_opciones') || $type !== 'productos') {
+            return response()->json($page);
+        }
+
+        $payload = $page->toArray();
+        $payload['categorias'] = DB::table('TEC_CATEGORIA')
+            ->where('CAT_Estado', true)
+            ->orderBy('CAT_Nombre')
+            ->get(['CAT_Categoria', 'CAT_Nombre']);
+        $payload['marcas'] = DB::table('TEC_MARCA')
+            ->where('MAR_Estado', true)
+            ->orderBy('MAR_Nombre')
+            ->get(['MAR_Marca', 'MAR_Nombre']);
+
+        return response()->json($payload);
     }
 
     public function store(Request $request, string $type): JsonResponse
@@ -96,8 +120,20 @@ class CatalogController extends ApiController
         $config = $this->config($type);
         abort_unless(DB::table($config['table'])->where($config['key'], $id)->exists(), 404, 'Registro no encontrado.');
         $data = $this->validatedData($request, $type, $id);
+        $existencia = $type === 'productos' ? $data['existencia'] ?? null : null;
+        unset($data['existencia']);
         $data['updated_at'] = now();
-        DB::table($config['table'])->where($config['key'], $id)->update($data);
+
+        DB::transaction(function () use ($request, $config, $id, $data, $type, $existencia) {
+            DB::table($config['table'])->where($config['key'], $id)->update($data);
+            if ($type === 'productos' && $existencia !== null) {
+                $this->setProductStock($request, $id, (int) $existencia);
+            }
+        });
+
+        if ($type === 'productos') {
+            $this->syncAlert($id);
+        }
         $this->audit($request, strtoupper($type), 'MODIFICAR', $id, $data);
 
         return response()->json(['message' => 'Registro actualizado.']);
@@ -105,9 +141,19 @@ class CatalogController extends ApiController
 
     public function destroy(Request $request, string $type, int $id): JsonResponse
     {
-        $this->requirePermission(
+        return $this->setRecordState($request, $type, $id, false);
+    }
+
+    public function activate(Request $request, string $type, int $id): JsonResponse
+    {
+        return $this->setRecordState($request, $type, $id, true);
+    }
+
+    private function setRecordState(Request $request, string $type, int $id, bool $active): JsonResponse
+    {
+        $this->requireAnyPermission(
             $request,
-            $type === 'clientes' ? 'CLIENTES.GESTIONAR' : 'CATALOGOS.INACTIVAR'
+            $type === 'clientes' ? ['CLIENTES.GESTIONAR'] : ['CATALOGOS.INACTIVAR', 'CATALOGOS.GESTIONAR']
         );
         $config = $this->config($type);
         $exists = DB::table($config['table'])->where($config['key'], $id)->exists();
@@ -121,37 +167,44 @@ class CatalogController extends ApiController
             'productos' => 'PRO_Estado',
         };
         DB::table($config['table'])->where($config['key'], $id)->update([
-            $stateColumn => false,
+            $stateColumn => $active,
             'updated_at' => now(),
         ]);
-        $this->audit($request, strtoupper($type), 'INACTIVAR', $id);
+        $this->audit($request, strtoupper($type), $active ? 'ACTIVAR' : 'INACTIVAR', $id);
 
-        return response()->json(['message' => 'Registro inactivado.']);
+        return response()->json(['message' => $active ? 'Registro activado.' : 'Registro inactivado.']);
     }
 
     public function users(Request $request): JsonResponse
     {
         $this->requirePermission($request, 'USUARIOS.GESTIONAR');
 
-        return response()->json(
-            DB::table('TEC_USUARIO as u')
-                ->join('TEC_ROL as r', 'r.ROL_Rol', '=', 'u.ROL_Rol')
-                ->select(
-                    'u.USU_Usuario as id',
-                    'u.ROL_Rol as rol_id',
-                    'u.USU_Primer_Nombre as primer_nombre',
-                    'u.USU_Segundo_Nombre as segundo_nombre',
-                    'u.USU_Primer_Apellido as primer_apellido',
-                    'u.USU_Segundo_Apellido as segundo_apellido',
-                    'u.USU_Correo as correo',
-                    'u.USU_Estado as estado',
-                    'u.USU_Intentos_Fallidos as intentos',
-                    'u.USU_Bloqueado_Hasta as bloqueado_hasta',
-                    'r.ROL_Nombre as rol',
-                )
-                ->orderBy('u.USU_Primer_Nombre')
-                ->get()
-        );
+        $users = DB::table('TEC_USUARIO as u')
+            ->join('TEC_ROL as r', 'r.ROL_Rol', '=', 'u.ROL_Rol')
+            ->select(
+                'u.USU_Usuario as id',
+                'u.ROL_Rol as rol_id',
+                'u.USU_Primer_Nombre as primer_nombre',
+                'u.USU_Segundo_Nombre as segundo_nombre',
+                'u.USU_Primer_Apellido as primer_apellido',
+                'u.USU_Segundo_Apellido as segundo_apellido',
+                'u.USU_Correo as correo',
+                'u.USU_Estado as estado',
+                'u.USU_Intentos_Fallidos as intentos',
+                'u.USU_Bloqueado_Hasta as bloqueado_hasta',
+                'r.ROL_Nombre as rol',
+            )
+            ->orderBy('u.USU_Primer_Nombre')
+            ->get();
+
+        if (! $request->boolean('con_roles')) {
+            return response()->json($users);
+        }
+
+        return response()->json([
+            'usuarios' => $users,
+            'roles' => DB::table('TEC_ROL')->orderBy('ROL_Nombre')->get(['ROL_Rol', 'ROL_Nombre', 'ROL_Estado']),
+        ]);
     }
 
     public function storeUser(Request $request): JsonResponse
@@ -159,13 +212,14 @@ class CatalogController extends ApiController
         $this->requirePermission($request, 'USUARIOS.GESTIONAR');
         $data = $request->validate([
             'rol_id' => ['required', 'integer', Rule::exists('TEC_ROL', 'ROL_Rol')->where('ROL_Estado', true)],
-            'primer_nombre' => ['required', 'string', 'max:60'],
-            'segundo_nombre' => ['nullable', 'string', 'max:60'],
-            'primer_apellido' => ['required', 'string', 'max:60'],
-            'segundo_apellido' => ['nullable', 'string', 'max:60'],
+            'primer_nombre' => FieldRules::personName(),
+            'segundo_nombre' => FieldRules::personName(false),
+            'primer_apellido' => FieldRules::personName(),
+            'segundo_apellido' => FieldRules::personName(false),
             'correo' => ['required', 'email', 'max:120', 'unique:TEC_USUARIO,USU_Correo'],
             'contrasena' => PasswordRules::required(),
         ], [
+            ...FieldRules::messages(),
             'contrasena' => PasswordRules::message(),
         ]);
 
@@ -196,13 +250,14 @@ class CatalogController extends ApiController
                     $query->where('ROL_Estado', true)->orWhere('ROL_Rol', $user->ROL_Rol);
                 }),
             ],
-            'primer_nombre' => ['required', 'string', 'max:60'],
-            'segundo_nombre' => ['nullable', 'string', 'max:60'],
-            'primer_apellido' => ['required', 'string', 'max:60'],
-            'segundo_apellido' => ['nullable', 'string', 'max:60'],
+            'primer_nombre' => FieldRules::personName(),
+            'segundo_nombre' => FieldRules::personName(false),
+            'primer_apellido' => FieldRules::personName(),
+            'segundo_apellido' => FieldRules::personName(false),
             'correo' => ['required', 'email', 'max:120', Rule::unique('TEC_USUARIO', 'USU_Correo')->ignore($id, 'USU_Usuario')],
             'contrasena' => PasswordRules::optional(),
         ], [
+            ...FieldRules::messages(),
             'contrasena' => PasswordRules::message(),
         ]);
 
@@ -252,14 +307,14 @@ class CatalogController extends ApiController
 
     public function references(): JsonResponse
     {
-        return response()->json([
+        return response()->json(cache()->remember('tec_referencias', 300, fn () => [
             'estados_pedido' => DB::table('TEC_ESTADO_PEDIDO')->where('ESP_Estado', true)->orderBy('ESP_Orden')->get(),
             'estados_compra' => DB::table('TEC_ESTADO_COMPRA')->where('ESC_Estado', true)->orderBy('ESC_Orden')->get(),
             'estados_venta' => DB::table('TEC_ESTADO_VENTA')->where('ESV_Estado', true)->orderBy('ESV_Codigo')->get(),
             'estados_pago' => DB::table('TEC_ESTADO_PAGO')->where('EPA_Estado', true)->orderBy('EPA_Codigo')->get(),
             'metodos_pago' => DB::table('TEC_METODO_PAGO')->where('MPA_Estado', true)->orderBy('MPA_Nombre')->get(),
             'tipos_movimiento' => DB::table('TEC_TIPO_MOVIMIENTO')->where('TIM_Estado', true)->orderBy('TIM_Codigo')->get(),
-        ]);
+        ]));
     }
 
     private function config(string $type): array
@@ -283,14 +338,14 @@ class CatalogController extends ApiController
     private function clientData(Request $request, ?int $id): array
     {
         $data = $request->validate([
-            'identificacion' => ['required', 'string', 'max:30', Rule::unique('TEC_CLIENTE', 'CLI_Identificacion')->ignore($id, 'CLI_Cliente')],
-            'primer_nombre' => ['required', 'string', 'max:60'],
-            'segundo_nombre' => ['nullable', 'string', 'max:60'],
-            'primer_apellido' => ['required', 'string', 'max:60'],
-            'segundo_apellido' => ['nullable', 'string', 'max:60'],
+            'identificacion' => [...FieldRules::identification(), Rule::unique('TEC_CLIENTE', 'CLI_Identificacion')->ignore($id, 'CLI_Cliente')],
+            'primer_nombre' => FieldRules::personName(),
+            'segundo_nombre' => FieldRules::personName(false),
+            'primer_apellido' => FieldRules::personName(),
+            'segundo_apellido' => FieldRules::personName(false),
             'correo' => ['nullable', 'email', 'max:120'],
-            'telefono' => ['nullable', 'string', 'max:30'],
-        ]);
+            'telefono' => FieldRules::phone(),
+        ], FieldRules::messages());
 
         return [
             'CLI_Identificacion' => $data['identificacion'],
@@ -307,12 +362,12 @@ class CatalogController extends ApiController
     private function providerData(Request $request, ?int $id): array
     {
         $data = $request->validate([
-            'identificacion_fiscal' => ['required', 'string', 'max:40', Rule::unique('TEC_PROVEEDOR', 'PRV_Identificacion_Fiscal')->ignore($id, 'PRV_Proveedor')],
-            'razon_social' => ['required', 'string', 'max:120'],
-            'contacto' => ['nullable', 'string', 'max:120'],
-            'telefono' => ['nullable', 'string', 'max:30'],
+            'identificacion_fiscal' => [...FieldRules::identification(true, 40), Rule::unique('TEC_PROVEEDOR', 'PRV_Identificacion_Fiscal')->ignore($id, 'PRV_Proveedor')],
+            'razon_social' => FieldRules::companyName(),
+            'contacto' => FieldRules::personName(false, 120),
+            'telefono' => FieldRules::phone(),
             'correo' => ['nullable', 'email', 'max:120'],
-        ]);
+        ], FieldRules::messages());
 
         return [
             'PRV_Identificacion_Fiscal' => $data['identificacion_fiscal'],
@@ -328,8 +383,8 @@ class CatalogController extends ApiController
     {
         $name = "{$prefix}_Nombre";
         $data = $request->validate([
-            'nombre' => ['required', 'string', 'max:80', Rule::unique($table, $name)->ignore($id, $key)],
-        ]);
+            'nombre' => [...FieldRules::catalogName(), Rule::unique($table, $name)->ignore($id, $key)],
+        ], FieldRules::messages());
 
         return [$name => $data['nombre'], "{$prefix}_Estado" => true];
     }
@@ -339,15 +394,16 @@ class CatalogController extends ApiController
         $data = $request->validate([
             'categoria_id' => ['required', 'integer', 'exists:TEC_CATEGORIA,CAT_Categoria'],
             'marca_id' => ['required', 'integer', 'exists:TEC_MARCA,MAR_Marca'],
-            'sku' => ['required', 'string', 'max:40', Rule::unique('TEC_PRODUCTO', 'PRO_SKU')->ignore($id, 'PRO_Producto')],
-            'nombre' => ['required', 'string', 'max:120'],
-            'descripcion' => ['nullable', 'string'],
+            'sku' => [...FieldRules::sku(), Rule::unique('TEC_PRODUCTO', 'PRO_SKU')->ignore($id, 'PRO_Producto')],
+            'nombre' => FieldRules::catalogName(true, 120),
+            'descripcion' => FieldRules::text(false, 500),
             'costo' => ['required', 'numeric', 'min:0'],
             'precio' => ['required', 'numeric', 'gt:costo'],
             'existencia_minima' => ['required', 'integer', 'min:0'],
-        ]);
+            'existencia' => ['nullable', 'integer', 'min:0'],
+        ], FieldRules::messages());
 
-        return [
+        $payload = [
             'CAT_Categoria' => $data['categoria_id'],
             'MAR_Marca' => $data['marca_id'],
             'PRO_SKU' => $data['sku'],
@@ -358,5 +414,55 @@ class CatalogController extends ApiController
             'PRO_Existencia_Minima' => $data['existencia_minima'],
             'PRO_Estado' => true,
         ];
+
+        if ($id !== null && array_key_exists('existencia', $data) && $data['existencia'] !== null) {
+            $payload['existencia'] = (int) $data['existencia'];
+        }
+
+        return $payload;
+    }
+
+    private function setProductStock(Request $request, int $productId, int $after): void
+    {
+        $inventory = DB::table('TEC_INVENTARIO')
+            ->where('PRO_Producto', $productId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $inventory) {
+            DB::table('TEC_INVENTARIO')->insert([
+                'PRO_Producto' => $productId,
+                'INV_Existencia' => $after,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            return;
+        }
+
+        $before = (int) $inventory->INV_Existencia;
+        if ($before === $after) {
+            return;
+        }
+
+        DB::table('TEC_INVENTARIO')->where('INV_Inventario', $inventory->INV_Inventario)->update([
+            'INV_Existencia' => $after,
+            'updated_at' => now(),
+        ]);
+
+        DB::table('TEC_MOVIMIENTO_INVENTARIO')->insert([
+            'PRO_Producto' => $productId,
+            'USU_Usuario' => $request->user()->USU_Usuario,
+            'TIM_Tipo_Movimiento' => Catalogos::tipoMovimiento('AJUSTE'),
+            'MOV_Cantidad' => $after - $before,
+            'MOV_Existencia_Anterior' => $before,
+            'MOV_Existencia_Nueva' => $after,
+            'MOV_Documento_Tipo' => 'PRODUCTO',
+            'MOV_Documento' => $productId,
+            'MOV_Motivo' => 'Ajuste desde edición de producto',
+            'MOV_Fecha' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 }

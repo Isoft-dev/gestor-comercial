@@ -24,23 +24,37 @@ class PurchaseController extends ApiController
             $query->where('c.PRV_Proveedor', $request->integer('proveedor_id'));
         }
         if ($request->filled('desde')) {
-            $query->whereDate('c.COM_Fecha', '>=', $request->query('desde'));
+            $query->where('c.COM_Fecha', '>=', $request->query('desde').' 00:00:00');
         }
         if ($request->filled('hasta')) {
-            $query->whereDate('c.COM_Fecha', '<=', $request->query('hasta'));
+            $query->where('c.COM_Fecha', '<=', $request->query('hasta').' 23:59:59');
         }
 
         $purchases = $query->orderByDesc('c.COM_Fecha')->paginate(20);
-        foreach ($purchases as $purchase) {
-            $purchase->detalles = DB::table('TEC_DETALLE_COMPRA as d')
+        $ids = collect($purchases->items())->pluck('COM_Compra');
+        $details = $ids->isEmpty()
+            ? collect()
+            : DB::table('TEC_DETALLE_COMPRA as d')
                 ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'd.PRO_Producto')
-                ->where('d.COM_Compra', $purchase->COM_Compra)
+                ->whereIn('d.COM_Compra', $ids)
                 ->select('d.*', 'p.PRO_SKU', 'p.PRO_Nombre')
                 ->orderBy('p.PRO_Nombre')
-                ->get();
+                ->get()
+                ->groupBy('COM_Compra');
+        $this->attachGrouped($purchases, 'COM_Compra', 'detalles', $details);
+
+        if (! $request->boolean('con_opciones')) {
+            return response()->json($purchases);
         }
 
-        return response()->json($purchases);
+        $payload = $purchases->toArray();
+        $payload['proveedores'] = DB::table('TEC_PROVEEDOR')
+            ->where('PRV_Estado', true)
+            ->orderBy('PRV_Razon_Social')
+            ->get(['PRV_Proveedor', 'PRV_Razon_Social']);
+        $payload['productos'] = $this->productOptions();
+
+        return response()->json($payload);
     }
 
     public function store(Request $request): JsonResponse

@@ -34,23 +34,37 @@ class SaleController extends ApiController
             $query->where('ep.EPA_Codigo', $request->query('estado_pago'));
         }
         if ($request->filled('desde')) {
-            $query->whereDate('v.VEN_Fecha', '>=', $request->query('desde'));
+            $query->where('v.VEN_Fecha', '>=', $request->query('desde').' 00:00:00');
         }
         if ($request->filled('hasta')) {
-            $query->whereDate('v.VEN_Fecha', '<=', $request->query('hasta'));
+            $query->where('v.VEN_Fecha', '<=', $request->query('hasta').' 23:59:59');
         }
 
         $sales = $query->orderByDesc('v.VEN_Fecha')->paginate(20);
-        foreach ($sales as $sale) {
-            $sale->pagos = DB::table('TEC_PAGO as pg')
+        $ids = collect($sales->items())->pluck('VEN_Venta');
+        $payments = $ids->isEmpty()
+            ? collect()
+            : DB::table('TEC_PAGO as pg')
                 ->join('TEC_METODO_PAGO as mp', 'mp.MPA_Metodo_Pago', '=', 'pg.MPA_Metodo_Pago')
-                ->where('pg.VEN_Venta', $sale->VEN_Venta)
+                ->whereIn('pg.VEN_Venta', $ids)
                 ->select('pg.*', 'mp.MPA_Codigo as PAG_Metodo', 'mp.MPA_Nombre as metodo_nombre')
                 ->orderByDesc('pg.PAG_Fecha')
-                ->get();
+                ->get()
+                ->groupBy('VEN_Venta');
+        $this->attachGrouped($sales, 'VEN_Venta', 'pagos', $payments);
+
+        if (! $request->boolean('con_opciones')) {
+            return response()->json($sales);
         }
 
-        return response()->json($sales);
+        $payload = $sales->toArray();
+        $payload['metodos_pago'] = cache()->remember(
+            'tec_metodos_pago',
+            300,
+            fn () => DB::table('TEC_METODO_PAGO')->where('MPA_Estado', true)->orderBy('MPA_Nombre')->get(),
+        );
+
+        return response()->json($payload);
     }
 
     public function storeFromOrder(Request $request, int $orderId): JsonResponse

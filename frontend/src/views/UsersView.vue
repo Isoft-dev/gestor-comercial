@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
+import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { CircleAlert, CircleCheck, Pencil, Save, UserPlus, Users, X } from '@lucide/vue'
 
@@ -33,12 +34,9 @@ function reset() {
 
 async function load() {
   try {
-    const [usersResponse, rolesResponse] = await Promise.all([
-      api.get('/usuarios'),
-      api.get('/roles', { params: { compact: 1 } }),
-    ])
-    users.value = usersResponse.data
-    roles.value = rolesResponse.data
+    const { data } = await api.get('/usuarios', { params: { con_roles: 1 } })
+    users.value = data.usuarios
+    roles.value = data.roles
   } catch (requestError) {
     error.value = requestError.userMessage
   }
@@ -128,10 +126,10 @@ onMounted(load)
             <option v-for="role in selectableRoles" :key="role.ROL_Rol" :value="role.ROL_Rol">{{ role.ROL_Nombre }}</option>
           </select>
         </label>
-        <label>Primer nombre<input v-model="form.primer_nombre" required /></label>
-        <label>Segundo nombre<input v-model="form.segundo_nombre" /></label>
-        <label>Primer apellido<input v-model="form.primer_apellido" required /></label>
-        <label>Segundo apellido<input v-model="form.segundo_apellido" /></label>
+        <label>Primer nombre<input v-model="form.primer_nombre" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.primer_nombre = fields.persona.clean($event.target.value)" /></label>
+        <label>Segundo nombre<input v-model="form.segundo_nombre" maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.segundo_nombre = fields.persona.clean($event.target.value)" /></label>
+        <label>Primer apellido<input v-model="form.primer_apellido" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.primer_apellido = fields.persona.clean($event.target.value)" /></label>
+        <label>Segundo apellido<input v-model="form.segundo_apellido" maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.segundo_apellido = fields.persona.clean($event.target.value)" /></label>
         <label>Correo<input v-model="form.correo" type="email" required /></label>
         <label>Contraseña
           <input v-model="form.contrasena" type="password" minlength="10" :required="!editingId" />

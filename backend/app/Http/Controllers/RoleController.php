@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Entrega;
+use App\Support\FieldRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,20 +27,21 @@ class RoleController extends ApiController
             $this->attachPermissions($roles);
         }
 
-        return response()->json($roles);
+        if (! $request->boolean('con_permisos')) {
+            return response()->json($roles);
+        }
+
+        return response()->json([
+            'roles' => $roles,
+            'permisos' => $this->visiblePermissions(),
+        ]);
     }
 
     public function permissions(Request $request): JsonResponse
     {
         $this->requirePermission($request, 'USUARIOS.GESTIONAR');
 
-        return response()->json(
-            DB::table('TEC_PERMISO')
-                ->where('PER_Estado', true)
-                ->orderBy('PER_Modulo')
-                ->orderBy('PER_Codigo')
-                ->get()
-        );
+        return response()->json($this->visiblePermissions());
     }
 
     public function store(Request $request): JsonResponse
@@ -68,7 +71,10 @@ class RoleController extends ApiController
         $this->requirePermission($request, 'USUARIOS.GESTIONAR');
         $role = $this->findRole($id);
         $data = $this->validatedRole($request, $id);
-        $permissions = $this->guardAdminPermissions($role->ROL_Nombre, $data['permisos']);
+        $permissions = $this->guardAdminPermissions(
+            $role->ROL_Nombre,
+            $this->mergeHiddenPermissions($id, $data['permisos']),
+        );
 
         DB::transaction(function () use ($role, $data, $permissions, $id) {
             DB::table('TEC_ROL')->where('ROL_Rol', $id)->update([
@@ -108,10 +114,38 @@ class RoleController extends ApiController
     private function validatedRole(Request $request, ?int $id = null): array
     {
         return $request->validate([
-            'nombre' => ['required', 'string', 'max:30', Rule::unique('TEC_ROL', 'ROL_Nombre')->ignore($id, 'ROL_Rol')],
+            'nombre' => [...FieldRules::roleName(), Rule::unique('TEC_ROL', 'ROL_Nombre')->ignore($id, 'ROL_Rol')],
             'permisos' => ['required', 'array', 'min:1'],
-            'permisos.*' => ['integer', 'exists:TEC_PERMISO,PER_Permiso'],
-        ]);
+            'permisos.*' => [
+                'integer',
+                Rule::exists('TEC_PERMISO', 'PER_Permiso')->where(function ($query) {
+                    $query->whereIn('PER_Codigo', Entrega::codigosVisibles());
+                }),
+            ],
+        ], FieldRules::messages());
+    }
+
+    private function visiblePermissions()
+    {
+        return DB::table('TEC_PERMISO')
+            ->where('PER_Estado', true)
+            ->whereIn('PER_Codigo', Entrega::codigosVisibles())
+            ->orderBy('PER_Modulo')
+            ->orderBy('PER_Codigo')
+            ->get();
+    }
+
+    private function mergeHiddenPermissions(int $roleId, array $submitted): array
+    {
+        $visibleIds = DB::table('TEC_PERMISO')
+            ->whereIn('PER_Codigo', Entrega::codigosVisibles())
+            ->pluck('PER_Permiso');
+        $kept = DB::table('TEC_ROL_PERMISO')
+            ->where('ROL_Rol', $roleId)
+            ->whereNotIn('PER_Permiso', $visibleIds)
+            ->pluck('PER_Permiso');
+
+        return $kept->merge($submitted)->unique()->values()->all();
     }
 
     private function findRole(int $id): object

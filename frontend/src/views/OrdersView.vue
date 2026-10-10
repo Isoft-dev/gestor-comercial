@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
+import { askConfirm, askPrompt } from '../lib/dialog'
 import { useAuthStore } from '../stores/auth'
 import { Ban, Check, CircleAlert, CircleCheck, ClipboardList, Plus, ShoppingBag, X } from '@lucide/vue'
 
@@ -15,13 +16,10 @@ const form = reactive({ cliente_id: '', producto_id: '', cantidad: 1, descuento_
 async function load() {
   error.value = ''
   try {
-    const requests = [api.get('/pedidos')]
-    if (auth.can('CLIENTES.GESTIONAR')) requests.push(api.get('/catalogos/clientes?por_pagina=100'))
-    if (auth.can('CATALOGOS.GESTIONAR')) requests.push(api.get('/catalogos/productos?por_pagina=100'))
-    const [orderResponse, clientResponse, productResponse] = await Promise.all(requests)
-    orders.value = orderResponse.data.data
-    if (clientResponse) clients.value = clientResponse.data.data
-    if (productResponse) products.value = productResponse.data.data
+    const { data } = await api.get('/pedidos', { params: { con_opciones: 1 } })
+    orders.value = data.data
+    if (data.clientes) clients.value = data.clientes
+    if (data.productos) products.value = data.productos
   } catch (requestError) {
     error.value = requestError.userMessage
   }
@@ -51,13 +49,23 @@ async function action(path, payload = {}) {
   }
 }
 
-function cancel(id) {
-  const motivo = prompt('Motivo de cancelación:')
+async function cancel(id) {
+  const motivo = await askPrompt({
+    title: 'Cancelar pedido',
+    message: 'Escriba el motivo de la cancelación.',
+    confirmText: 'Cancelar pedido',
+    tone: 'danger',
+  })
   if (motivo) action(`/pedidos/${id}/cancelar`, { motivo })
 }
 
-function decide(id, decision) {
-  const motivo = prompt(`Motivo para ${decision.toLowerCase()}:`)
+async function decide(id, decision) {
+  const motivo = await askPrompt({
+    title: decision === 'APROBAR' ? 'Aprobar descuento' : 'Rechazar descuento',
+    message: `Escriba el motivo para ${decision.toLowerCase()}.`,
+    confirmText: decision === 'APROBAR' ? 'Aprobar' : 'Rechazar',
+    tone: decision === 'APROBAR' ? 'warning' : 'danger',
+  })
   if (motivo) action(`/pedidos/${id}/decidir`, { decision, motivo })
 }
 

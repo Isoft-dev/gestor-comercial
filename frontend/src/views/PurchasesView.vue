@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
+import { askConfirm } from '../lib/dialog'
 import { CircleAlert, CircleCheck, PackageCheck, Plus, Truck } from '@lucide/vue'
 
 const purchases = ref([])
@@ -12,14 +13,10 @@ const form = reactive({ proveedor_id: '', producto_id: '', cantidad: 1, costo_un
 
 async function load() {
   try {
-    const [purchaseResponse, providerResponse, productResponse] = await Promise.all([
-      api.get('/compras'),
-      api.get('/catalogos/proveedores?por_pagina=100'),
-      api.get('/catalogos/productos?por_pagina=100'),
-    ])
-    purchases.value = purchaseResponse.data.data
-    providers.value = providerResponse.data.data
-    products.value = productResponse.data.data
+    const { data } = await api.get('/compras', { params: { con_opciones: 1 } })
+    purchases.value = data.data
+    if (data.proveedores) providers.value = data.proveedores
+    if (data.productos) products.value = data.productos
   } catch (requestError) {
     error.value = requestError.userMessage
   }
@@ -40,7 +37,13 @@ async function submit() {
 }
 
 async function receive(id) {
-  if (!confirm('¿Confirmar recepción y entrada al inventario?')) return
+  const accepted = await askConfirm({
+    title: 'Recibir compra',
+    message: '¿Confirmar la recepción? Esta acción dará entrada al inventario.',
+    confirmText: 'Recibir',
+    tone: 'warning',
+  })
+  if (!accepted) return
   try {
     await api.post(`/compras/${id}/recibir`)
     message.value = 'Compra recibida e inventario actualizado.'

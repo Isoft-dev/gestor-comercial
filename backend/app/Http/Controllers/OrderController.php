@@ -34,16 +34,35 @@ class OrderController extends ApiController
         }
 
         $orders = $query->orderByDesc('p.PED_Fecha')->paginate(20);
-        foreach ($orders as $order) {
-            $order->detalles = DB::table('TEC_DETALLE_PEDIDO as d')
+        $ids = collect($orders->items())->pluck('PED_Pedido');
+        $details = $ids->isEmpty()
+            ? collect()
+            : DB::table('TEC_DETALLE_PEDIDO as d')
                 ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'd.PRO_Producto')
-                ->where('d.PED_Pedido', $order->PED_Pedido)
+                ->whereIn('d.PED_Pedido', $ids)
                 ->select('d.*', 'p.PRO_SKU', 'p.PRO_Nombre')
                 ->orderBy('p.PRO_Nombre')
-                ->get();
+                ->get()
+                ->groupBy('PED_Pedido');
+        $this->attachGrouped($orders, 'PED_Pedido', 'detalles', $details);
+
+        if (! $request->boolean('con_opciones')) {
+            return response()->json($orders);
         }
 
-        return response()->json($orders);
+        $payload = $orders->toArray();
+        $payload['clientes'] = DB::table('TEC_CLIENTE')
+            ->where('CLI_Estado', true)
+            ->orderBy('CLI_Primer_Nombre')
+            ->get([
+                'CLI_Cliente',
+                'CLI_Identificacion',
+                'CLI_Primer_Nombre',
+                'CLI_Primer_Apellido',
+            ]);
+        $payload['productos'] = $this->productOptions();
+
+        return response()->json($payload);
     }
 
     public function store(Request $request): JsonResponse

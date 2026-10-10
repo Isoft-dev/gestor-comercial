@@ -2,9 +2,13 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
+import { askConfirm } from '../lib/dialog'
+import { fields as masks } from '../lib/fields'
+import { useAuthStore } from '../stores/auth'
 import { Ban, Building2, CircleAlert, CircleCheck, Layers, Pencil, Save, Tags, X } from '@lucide/vue'
 
 const route = useRoute()
+const auth = useAuthStore()
 const items = ref([])
 const message = ref('')
 const error = ref('')
@@ -13,11 +17,14 @@ const form = reactive({})
 
 const definitions = {
   proveedores: [
-    ['identificacion_fiscal', 'Identificación fiscal'], ['razon_social', 'Razón social'],
-    ['contacto', 'Contacto'], ['correo', 'Correo', 'email'], ['telefono', 'Teléfono'],
+    ['identificacion_fiscal', 'Identificación fiscal', 'text', 'codigo'],
+    ['razon_social', 'Razón social', 'text', 'empresa'],
+    ['contacto', 'Contacto', 'text', 'persona'],
+    ['correo', 'Correo', 'email'],
+    ['telefono', 'Teléfono', 'text', 'telefono'],
   ],
-  categorias: [['nombre', 'Nombre']],
-  marcas: [['nombre', 'Nombre']],
+  categorias: [['nombre', 'Nombre', 'text', 'catalogo']],
+  marcas: [['nombre', 'Nombre', 'text', 'catalogo']],
 }
 
 const titles = {
@@ -36,6 +43,15 @@ const idKey = computed(() => ({
   categorias: 'CAT_Categoria',
   marcas: 'MAR_Marca',
 }[type.value]))
+const stateKey = computed(() => ({
+  proveedores: 'PRV_Estado',
+  categorias: 'CAT_Estado',
+  marcas: 'MAR_Estado',
+}[type.value]))
+
+function isActive(item) {
+  return Boolean(item[stateKey.value])
+}
 
 function reset() {
   editingId.value = null
@@ -86,9 +102,34 @@ async function submit() {
 }
 
 async function deactivate(item) {
-  if (!confirm('¿Desea inactivar este registro?')) return
+  await changeState(item, false)
+}
+
+async function activate(item) {
+  await changeState(item, true)
+}
+
+async function changeState(item, active) {
+  const name = item.PRV_Razon_Social || item.CAT_Nombre || item.MAR_Nombre
+  const accepted = await askConfirm({
+    title: active ? 'Activar registro' : 'Inactivar registro',
+    message: active
+      ? `¿Desea volver a activar ${name}?`
+      : `¿Desea inactivar ${name}? El registro se conservará, pero dejará de estar disponible.`,
+    confirmText: active ? 'Activar' : 'Inactivar',
+    tone: active ? 'warning' : 'danger',
+  })
+  if (!accepted) return
+  message.value = ''
+  error.value = ''
   try {
-    await api.delete(`/catalogos/${type.value}/${item[idKey.value]}`)
+    if (active) {
+      await api.patch(`/catalogos/${type.value}/${item[idKey.value]}/estado`)
+      message.value = 'Registro activado.'
+    } else {
+      await api.delete(`/catalogos/${type.value}/${item[idKey.value]}`)
+      message.value = 'Registro inactivado.'
+    }
     if (editingId.value === item[idKey.value]) reset()
     await load()
   } catch (requestError) {
@@ -117,9 +158,16 @@ watch(type, () => { reset(); load() }, { immediate: true })
     <form class="panel" @submit.prevent="submit">
       <div class="panel-heading"><Save :size="18" /><h2>{{ editingId ? 'Modificar registro' : 'Nuevo registro' }}</h2></div>
       <div class="form-grid">
-        <label v-for="[name, label, inputType] in fields" :key="name">
+        <label v-for="[name, label, inputType, kind] in fields" :key="name">
           {{ label }}
-          <input v-model="form[name]" :type="inputType || 'text'" :required="!['correo', 'telefono', 'contacto'].includes(name)" />
+          <input
+            v-model="form[name]"
+            :type="inputType || 'text'"
+            :required="!['correo', 'telefono', 'contacto'].includes(name)"
+            :pattern="kind ? masks[kind].pattern : undefined"
+            :title="kind ? masks[kind].title : undefined"
+            @input="kind && (form[name] = masks[kind].clean($event.target.value))"
+          />
         </label>
       </div>
       <div class="actions">
@@ -131,15 +179,20 @@ watch(type, () => { reset(); load() }, { immediate: true })
       <div class="panel-heading"><Layers :size="18" /><h2>Registros</h2></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Identificador</th><th>Nombre</th><th>Información</th><th>Acción</th></tr></thead>
+          <thead><tr><th>Identificador</th><th>Nombre</th><th>Estado</th><th>Acción</th></tr></thead>
           <tbody>
             <tr v-for="item in items" :key="item[idKey]">
               <td class="mono">{{ item.PRV_Identificacion_Fiscal || item.CAT_Categoria || item.MAR_Marca }}</td>
               <td>{{ item.PRV_Razon_Social || item.CAT_Nombre || item.MAR_Nombre }}</td>
-              <td>{{ item.PRV_Correo || 'Activo' }}</td>
+              <td><span class="status" :class="{ off: !isActive(item) }">{{ isActive(item) ? 'Activo' : 'Inactivo' }}</span></td>
               <td class="actions">
                 <button class="link" type="button" @click="fill(item)"><Pencil :size="14" /> Editar</button>
-                <button class="link danger" type="button" @click="deactivate(item)"><Ban :size="14" /> Inactivar</button>
+                <button v-if="isActive(item) && auth.can(['CATALOGOS.INACTIVAR', 'CATALOGOS.GESTIONAR'])" class="link danger" type="button" @click="deactivate(item)">
+                  <Ban :size="14" /> Inactivar
+                </button>
+                <button v-else-if="!isActive(item) && auth.can(['CATALOGOS.INACTIVAR', 'CATALOGOS.GESTIONAR'])" class="link" type="button" @click="activate(item)">
+                  <CircleCheck :size="14" /> Activar
+                </button>
               </td>
             </tr>
           </tbody>

@@ -61,7 +61,7 @@ async function submit() {
           <label>Contraseña
             <span class="field-icon">
               <LockKeyhole :size="16" :stroke-width="2" />
-              <input v-model="contrasena" type="password" required minlength="10" />
+              <input v-model="contrasena" type="password" required autocomplete="current-password" />
             </span>
           </label>
           <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>

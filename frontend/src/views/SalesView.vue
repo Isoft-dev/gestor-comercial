@@ -11,12 +11,9 @@ const payment = reactive({ venta_id: '', monto: 0, metodo: 'EFECTIVO', referenci
 
 async function load() {
   try {
-    const [salesResponse, references] = await Promise.all([
-      api.get('/ventas'),
-      api.get('/referencias'),
-    ])
-    sales.value = salesResponse.data.data
-    methods.value = references.data.metodos_pago
+    const { data } = await api.get('/ventas', { params: { con_opciones: 1 } })
+    sales.value = data.data
+    if (data.metodos_pago) methods.value = data.metodos_pago
     if (!methods.value.some((method) => method.MPA_Codigo === payment.metodo) && methods.value[0]) {
       payment.metodo = methods.value[0].MPA_Codigo
     }

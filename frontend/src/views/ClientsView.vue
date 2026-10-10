@@ -1,6 +1,8 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
+import { askConfirm } from '../lib/dialog'
+import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { Ban, CircleAlert, CircleCheck, Pencil, Save, Search, UserPlus, Users, X } from '@lucide/vue'
 
@@ -79,10 +81,31 @@ function edit(item) {
 }
 
 async function deactivate(item) {
-  if (!confirm(`¿Desea inactivar a ${fullName(item)}?`)) return
+  await changeState(item, false)
+}
+
+async function activate(item) {
+  await changeState(item, true)
+}
+
+async function changeState(item, active) {
+  const accepted = await askConfirm({
+    title: active ? 'Activar cliente' : 'Inactivar cliente',
+    message: active
+      ? `¿Desea volver a activar a ${fullName(item)}?`
+      : `¿Desea inactivar a ${fullName(item)}? El cliente se conservará, pero no estará disponible.`,
+    confirmText: active ? 'Activar' : 'Inactivar',
+    tone: active ? 'warning' : 'danger',
+  })
+  if (!accepted) return
   try {
-    await api.delete(`/catalogos/clientes/${item.CLI_Cliente}`)
-    message.value = 'Cliente inactivado.'
+    if (active) {
+      await api.patch(`/catalogos/clientes/${item.CLI_Cliente}/estado`)
+      message.value = 'Cliente activado.'
+    } else {
+      await api.delete(`/catalogos/clientes/${item.CLI_Cliente}`)
+      message.value = 'Cliente inactivado.'
+    }
     if (editingId.value === item.CLI_Cliente) reset()
     await load()
   } catch (requestError) {
@@ -115,12 +138,12 @@ onMounted(load)
         <h2>{{ editingId ? 'Modificar cliente' : 'Nuevo cliente' }}</h2>
       </div>
       <div class="form-grid">
-        <label>Identificación<input v-model="form.identificacion" required maxlength="30" /></label>
-        <label>Teléfono<input v-model="form.telefono" maxlength="30" /></label>
-        <label>Primer nombre<input v-model="form.primer_nombre" required maxlength="60" /></label>
-        <label>Segundo nombre<input v-model="form.segundo_nombre" maxlength="60" /></label>
-        <label>Primer apellido<input v-model="form.primer_apellido" required maxlength="60" /></label>
-        <label>Segundo apellido<input v-model="form.segundo_apellido" maxlength="60" /></label>
+        <label>Identificación<input v-model="form.identificacion" required maxlength="30" :pattern="fields.codigo.pattern" :title="fields.codigo.title" @input="form.identificacion = fields.codigo.clean($event.target.value)" /></label>
+        <label>Teléfono<input v-model="form.telefono" maxlength="30" :pattern="fields.telefono.pattern" :title="fields.telefono.title" @input="form.telefono = fields.telefono.clean($event.target.value)" /></label>
+        <label>Primer nombre<input v-model="form.primer_nombre" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.primer_nombre = fields.persona.clean($event.target.value)" /></label>
+        <label>Segundo nombre<input v-model="form.segundo_nombre" maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.segundo_nombre = fields.persona.clean($event.target.value)" /></label>
+        <label>Primer apellido<input v-model="form.primer_apellido" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.primer_apellido = fields.persona.clean($event.target.value)" /></label>
+        <label>Segundo apellido<input v-model="form.segundo_apellido" maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.segundo_apellido = fields.persona.clean($event.target.value)" /></label>
         <label>Correo<input v-model="form.correo" type="email" maxlength="120" /></label>
       </div>
       <div class="actions">
@@ -151,6 +174,9 @@ onMounted(load)
                 <button class="link" type="button" @click="edit(item)"><Pencil :size="14" /> Editar</button>
                 <button v-if="item.CLI_Estado && auth.can('CLIENTES.GESTIONAR')" class="link danger" type="button" @click="deactivate(item)">
                   <Ban :size="14" /> Inactivar
+                </button>
+                <button v-else-if="!item.CLI_Estado && auth.can('CLIENTES.GESTIONAR')" class="link" type="button" @click="activate(item)">
+                  <CircleCheck :size="14" /> Activar
                 </button>
               </td>
             </tr>

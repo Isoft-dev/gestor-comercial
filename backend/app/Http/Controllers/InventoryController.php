@@ -36,12 +36,34 @@ class InventoryController extends ApiController
             $query->where('p.CAT_Categoria', $request->integer('categoria_id'));
         }
 
-        return response()->json($query->orderBy('p.PRO_Nombre')->paginate(20));
+        $stock = $query->orderBy('p.PRO_Nombre')->paginate(20);
+        if (! $request->boolean('completo')) {
+            return response()->json($stock);
+        }
+
+        return response()->json([
+            'stock' => $stock,
+            'movimientos' => $this->movementQuery($request)->orderByDesc('m.MOV_Fecha')->paginate(30),
+            'alertas' => $this->activeAlerts(),
+        ]);
     }
 
     public function movements(Request $request): JsonResponse
     {
         $this->requireAnyPermission($request, ['INVENTARIO.AJUSTAR', 'COMPRAS.REGISTRAR', 'REPORTES.CONSULTAR']);
+
+        return response()->json($this->movementQuery($request)->orderByDesc('m.MOV_Fecha')->paginate(30));
+    }
+
+    public function alerts(Request $request): JsonResponse
+    {
+        $this->requireAnyPermission($request, ['INVENTARIO.AJUSTAR', 'COMPRAS.REGISTRAR', 'REPORTES.CONSULTAR']);
+
+        return response()->json($this->activeAlerts());
+    }
+
+    private function movementQuery(Request $request)
+    {
         $query = DB::table('TEC_MOVIMIENTO_INVENTARIO as m')
             ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'm.PRO_Producto')
             ->join('TEC_USUARIO as u', 'u.USU_Usuario', '=', 'm.USU_Usuario')
@@ -62,27 +84,24 @@ class InventoryController extends ApiController
             $query->where('t.TIM_Codigo', $request->query('tipo'));
         }
         if ($request->filled('desde')) {
-            $query->whereDate('m.MOV_Fecha', '>=', $request->query('desde'));
+            $query->where('m.MOV_Fecha', '>=', $request->query('desde').' 00:00:00');
         }
         if ($request->filled('hasta')) {
-            $query->whereDate('m.MOV_Fecha', '<=', $request->query('hasta'));
+            $query->where('m.MOV_Fecha', '<=', $request->query('hasta').' 23:59:59');
         }
 
-        return response()->json($query->orderByDesc('m.MOV_Fecha')->paginate(30));
+        return $query;
     }
 
-    public function alerts(Request $request): JsonResponse
+    private function activeAlerts()
     {
-        $this->requireAnyPermission($request, ['INVENTARIO.AJUSTAR', 'COMPRAS.REGISTRAR', 'REPORTES.CONSULTAR']);
-        return response()->json(
-            DB::table('TEC_ALERTA as a')
-                ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'a.PRO_Producto')
-                ->join('TEC_INVENTARIO as i', 'i.PRO_Producto', '=', 'p.PRO_Producto')
-                ->where('a.ALE_Estado', 'ACTIVA')
-                ->select('a.*', 'p.PRO_SKU', 'p.PRO_Nombre', 'i.INV_Existencia', 'p.PRO_Existencia_Minima')
-                ->orderBy('p.PRO_Nombre')
-                ->get()
-        );
+        return DB::table('TEC_ALERTA as a')
+            ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'a.PRO_Producto')
+            ->join('TEC_INVENTARIO as i', 'i.PRO_Producto', '=', 'p.PRO_Producto')
+            ->where('a.ALE_Estado', 'ACTIVA')
+            ->select('a.*', 'p.PRO_SKU', 'p.PRO_Nombre', 'i.INV_Existencia', 'p.PRO_Existencia_Minima')
+            ->orderBy('p.PRO_Nombre')
+            ->get();
     }
 
     public function adjust(Request $request): JsonResponse
