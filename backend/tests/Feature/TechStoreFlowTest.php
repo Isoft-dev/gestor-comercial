@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Support\Catalogos;
 use Database\Seeders\DatabaseSeeder;
+use Database\Seeders\DemoDataSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -573,6 +574,46 @@ class TechStoreFlowTest extends TestCase
 
         $this->assertNull(DB::table('TEC_PRODUCTO')->where('PRO_Producto', $id)->value('PRO_Foto'));
         Storage::disk('public')->assertMissing('products/old.jpg');
+    }
+
+    public function test_demo_data_seeder_is_repeatable_and_keeps_existing_roles_unchanged(): void
+    {
+        $roleIds = DB::table('TEC_ROL')->orderBy('ROL_Rol')->pluck('ROL_Nombre', 'ROL_Rol')->all();
+        $countsBefore = [
+            'clientes' => DB::table('TEC_CLIENTE')->count(),
+            'categorias' => DB::table('TEC_CATEGORIA')->count(),
+            'marcas' => DB::table('TEC_MARCA')->count(),
+            'productos' => DB::table('TEC_PRODUCTO')->count(),
+            'usuarios' => DB::table('TEC_USUARIO')->count(),
+        ];
+
+        $this->seed(DemoDataSeeder::class);
+        $countsAfterFirstRun = [
+            'clientes' => DB::table('TEC_CLIENTE')->count(),
+            'categorias' => DB::table('TEC_CATEGORIA')->count(),
+            'marcas' => DB::table('TEC_MARCA')->count(),
+            'productos' => DB::table('TEC_PRODUCTO')->count(),
+            'usuarios' => DB::table('TEC_USUARIO')->count(),
+        ];
+        $this->seed(DemoDataSeeder::class);
+
+        $this->assertSame($roleIds, DB::table('TEC_ROL')->orderBy('ROL_Rol')->pluck('ROL_Nombre', 'ROL_Rol')->all());
+        $this->assertSame($countsAfterFirstRun, [
+            'clientes' => DB::table('TEC_CLIENTE')->count(),
+            'categorias' => DB::table('TEC_CATEGORIA')->count(),
+            'marcas' => DB::table('TEC_MARCA')->count(),
+            'productos' => DB::table('TEC_PRODUCTO')->count(),
+            'usuarios' => DB::table('TEC_USUARIO')->count(),
+        ]);
+        $this->assertSame(12, $countsAfterFirstRun['clientes'] - $countsBefore['clientes']);
+        $this->assertSame(3, $countsAfterFirstRun['categorias'] - $countsBefore['categorias']);
+        $this->assertSame(5, $countsAfterFirstRun['marcas'] - $countsBefore['marcas']);
+        $this->assertSame(15, $countsAfterFirstRun['productos'] - $countsBefore['productos']);
+        $this->assertSame(6, $countsAfterFirstRun['usuarios'] - $countsBefore['usuarios']);
+        $this->assertDatabaseHas('TEC_INVENTARIO', [
+            'PRO_Producto' => DB::table('TEC_PRODUCTO')->where('PRO_SKU', 'DEMO-AUD-001')->value('PRO_Producto'),
+            'INV_Existencia' => 0,
+        ]);
     }
 
     public function test_dashboard_exposes_five_indicators_and_report_pdf_is_downloadable(): void
