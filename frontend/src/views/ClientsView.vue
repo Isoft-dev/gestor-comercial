@@ -139,12 +139,12 @@ onMounted(load)
       </div>
       <div class="form-grid">
         <label>Identificación<input v-model="form.identificacion" required maxlength="30" :pattern="fields.codigo.pattern" :title="fields.codigo.title" @input="form.identificacion = fields.codigo.clean($event.target.value)" /></label>
-        <label>Teléfono<input v-model="form.telefono" maxlength="30" :pattern="fields.telefono.pattern" :title="fields.telefono.title" @input="form.telefono = fields.telefono.clean($event.target.value)" /></label>
+        <label>Teléfono<input v-model="form.telefono" :maxlength="fields.telefono.maxlength" :pattern="fields.telefono.pattern" :title="fields.telefono.title" @input="form.telefono = fields.telefono.clean($event.target.value)" /></label>
         <label>Primer nombre<input v-model="form.primer_nombre" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.primer_nombre = fields.persona.clean($event.target.value)" /></label>
         <label>Segundo nombre<input v-model="form.segundo_nombre" maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.segundo_nombre = fields.persona.clean($event.target.value)" /></label>
         <label>Primer apellido<input v-model="form.primer_apellido" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.primer_apellido = fields.persona.clean($event.target.value)" /></label>
         <label>Segundo apellido<input v-model="form.segundo_apellido" maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.segundo_apellido = fields.persona.clean($event.target.value)" /></label>
-        <label>Correo<input v-model="form.correo" type="email" maxlength="120" /></label>
+        <label>Correo<input v-model="form.correo" type="email" :maxlength="fields.correo.maxlength" :pattern="fields.correo.pattern" :title="fields.correo.title" @input="form.correo = fields.correo.clean($event.target.value)" /></label>
       </div>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear cliente' }}</button>

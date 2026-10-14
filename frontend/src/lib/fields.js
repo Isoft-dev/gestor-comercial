@@ -28,8 +28,15 @@ export const fields = {
     clean: (value) => String(value ?? '').replace(/[^A-Za-z0-9-]/g, ''),
   },
   telefono: {
-    pattern: '[0-9]+(?:[ \\-][0-9]+)*',
-    title: 'Solo números, espacios y guiones.',
-    clean: (value) => String(value ?? '').replace(/[^0-9 \\-]/g, ''),
+    pattern: '[0-9]{1,8}',
+    title: 'Solo números. Máximo 8 caracteres.',
+    maxlength: 8,
+    clean: (value) => String(value ?? '').replace(/\D/g, '').slice(0, 8),
+  },
+  correo: {
+    pattern: '[^\\s@]+@[^\\s@]+\\.[^\\s@]+',
+    title: 'Use un correo válido, por ejemplo nombre@dominio.com',
+    maxlength: 120,
+    clean: (value) => String(value ?? '').replace(/\s/g, ''),
   },
 }

@@ -179,8 +179,8 @@ onMounted(load)
           <label>Identificación<input v-model="client.identificacion" required maxlength="30" :pattern="fields.codigo.pattern" :title="fields.codigo.title" @input="client.identificacion = fields.codigo.clean($event.target.value)" /></label>
           <label>Primer nombre<input v-model="client.primer_nombre" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="client.primer_nombre = fields.persona.clean($event.target.value)" /></label>
           <label>Primer apellido<input v-model="client.primer_apellido" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="client.primer_apellido = fields.persona.clean($event.target.value)" /></label>
-          <label>Correo<input v-model="client.correo" type="email" /></label>
-          <label>Teléfono<input v-model="client.telefono" :pattern="fields.telefono.pattern" :title="fields.telefono.title" @input="client.telefono = fields.telefono.clean($event.target.value)" /></label>
+          <label>Correo<input v-model="client.correo" type="email" :maxlength="fields.correo.maxlength" :pattern="fields.correo.pattern" :title="fields.correo.title" @input="client.correo = fields.correo.clean($event.target.value)" /></label>
+          <label>Teléfono<input v-model="client.telefono" :maxlength="fields.telefono.maxlength" :pattern="fields.telefono.pattern" :title="fields.telefono.title" @input="client.telefono = fields.telefono.clean($event.target.value)" /></label>
           <button class="button primary" :disabled="sending">
             <ShoppingBag :size="16" /> {{ sending ? 'Registrando…' : 'Confirmar pedido' }}
           </button>

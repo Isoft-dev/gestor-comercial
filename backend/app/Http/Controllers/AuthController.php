@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Support\FieldRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,9 +18,9 @@ class AuthController extends ApiController
     public function login(Request $request): JsonResponse
     {
         $credentials = $request->validate([
-            'correo' => ['required', 'email'],
+            'correo' => FieldRules::email(true),
             'contrasena' => ['required', 'string'],
-        ]);
+        ], FieldRules::messages());
 
         $user = User::where('USU_Correo', $credentials['correo'])->first();
 

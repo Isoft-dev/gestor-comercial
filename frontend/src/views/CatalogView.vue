@@ -20,7 +20,7 @@ const definitions = {
     ['identificacion_fiscal', 'Identificación fiscal', 'text', 'codigo'],
     ['razon_social', 'Razón social', 'text', 'empresa'],
     ['contacto', 'Contacto', 'text', 'persona'],
-    ['correo', 'Correo', 'email'],
+    ['correo', 'Correo', 'email', 'correo'],
     ['telefono', 'Teléfono', 'text', 'telefono'],
   ],
   categorias: [['nombre', 'Nombre', 'text', 'catalogo']],
@@ -164,6 +164,7 @@ watch(type, () => { reset(); load() }, { immediate: true })
             v-model="form[name]"
             :type="inputType || 'text'"
             :required="!['correo', 'telefono', 'contacto'].includes(name)"
+            :maxlength="kind && masks[kind].maxlength ? masks[kind].maxlength : undefined"
             :pattern="kind ? masks[kind].pattern : undefined"
             :title="kind ? masks[kind].title : undefined"
             @input="kind && (form[name] = masks[kind].clean($event.target.value))"

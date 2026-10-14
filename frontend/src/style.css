@@ -460,6 +460,9 @@ th {
 td { padding: 12px; border-top: 1px solid #e4e9ef; vertical-align: top; }
 tr.critical td { background: #fff1f2; color: var(--danger); }
 tr.critical td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+tr.detail-row td { padding-top: 0; background: #f8fafc; color: var(--muted); }
+.detail-list { margin: 0; padding: 0 0 4px 18px; }
+.detail-list li { margin: 2px 0; }
 
 .status {
   display: inline-flex;

@@ -165,7 +165,6 @@ onMounted(load)
       </label>
       <div>
         <p class="eyebrow">Permisos</p>
-        <p class="muted">Si no marca Consultar ni Gestionar de un módulo, esa persona no lo verá en el menú ni podrá abrir la pantalla aunque escriba la URL. Consultar solo permite ver. Gestionar incluye consultar y permite crear o editar.</p>
         <p v-if="isAdminForm()" class="muted">El rol Administrador debe conservar los permisos de usuarios para no perder esta pantalla. Para probar que alguien no vea Usuarios, edite otro rol.</p>
         <div v-for="(items, module) in groupedPermissions" :key="module" class="permission-group">
           <strong>{{ module }}</strong>

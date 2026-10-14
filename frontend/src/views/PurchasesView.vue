@@ -79,10 +79,28 @@ onMounted(load)
       <div class="panel-heading"><PackageCheck :size="18" /><h2>Órdenes recientes</h2></div>
       <div class="table-wrap"><table>
         <thead><tr><th>#</th><th>Proveedor</th><th>Total</th><th>Estado</th><th></th></tr></thead>
-        <tbody><tr v-for="purchase in purchases" :key="purchase.COM_Compra">
-          <td class="mono">{{ purchase.COM_Compra }}</td><td>{{ purchase.PRV_Razon_Social }}</td><td class="mono">{{ formatCurrency(purchase.COM_Total) }}</td><td><span class="status" :data-state="purchase.COM_Estado">{{ purchase.COM_Estado }}</span></td>
-          <td><button v-if="purchase.COM_Estado === 'PENDIENTE'" class="link" type="button" @click="receive(purchase.COM_Compra)"><PackageCheck :size="14" /> Recibir</button></td>
-        </tr></tbody>
+        <tbody>
+          <template v-for="purchase in purchases" :key="purchase.COM_Compra">
+            <tr>
+              <td class="mono">{{ purchase.COM_Compra }}</td>
+              <td>{{ purchase.PRV_Razon_Social }}</td>
+              <td class="mono">{{ formatCurrency(purchase.COM_Total) }}</td>
+              <td><span class="status" :data-state="purchase.COM_Estado">{{ purchase.COM_Estado }}</span></td>
+              <td><button v-if="purchase.COM_Estado === 'PENDIENTE'" class="link" type="button" @click="receive(purchase.COM_Compra)"><PackageCheck :size="14" /> Recibir</button></td>
+            </tr>
+            <tr v-if="purchase.detalles?.length" class="detail-row">
+              <td colspan="5">
+                <ul class="detail-list">
+                  <li v-for="detail in purchase.detalles" :key="detail.DCO_Detalle_Compra">
+                    <span class="mono">{{ detail.PRO_SKU }}</span> {{ detail.PRO_Nombre }}
+                    · {{ detail.DCO_Cantidad }} × {{ formatCurrency(detail.DCO_Costo_Unitario) }}
+                    · {{ formatCurrency(detail.DCO_Subtotal) }}
+                  </li>
+                </ul>
+              </td>
+            </tr>
+          </template>
+        </tbody>
       </table></div>
     </section>
   </section>

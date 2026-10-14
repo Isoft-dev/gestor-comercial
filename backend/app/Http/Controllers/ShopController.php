@@ -43,7 +43,7 @@ class ShopController extends ApiController
             'segundo_nombre' => FieldRules::personName(false),
             'primer_apellido' => FieldRules::personName(),
             'segundo_apellido' => FieldRules::personName(false),
-            'correo' => ['nullable', 'email', 'max:120'],
+            'correo' => FieldRules::email(),
             'telefono' => FieldRules::phone(),
             'detalles' => ['required', 'array', 'min:1'],
             'detalles.*.producto_id' => ['required', 'integer', 'distinct', 'exists:TEC_PRODUCTO,PRO_Producto'],

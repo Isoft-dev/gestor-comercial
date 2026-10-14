@@ -12,7 +12,9 @@ class FieldRules
 
     public const CODE = '/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/';
 
-    public const PHONE = '/^[0-9]+(?:[ \-][0-9]+)*$/';
+    public const PHONE = '/^[0-9]{1,8}$/';
+
+    public const EMAIL = '/^[^\s@]+@[^\s@]+\.[^\s@]+$/';
 
     public static function personName(bool $required = true, int $max = 60): array
     {
@@ -39,9 +41,20 @@ class FieldRules
         return self::pattern($required, $max, self::CODE);
     }
 
-    public static function phone(bool $required = false, int $max = 30): array
+    public static function phone(bool $required = false, int $max = 8): array
     {
         return self::pattern($required, $max, self::PHONE);
+    }
+
+    public static function email(bool $required = false, int $max = 120): array
+    {
+        return [
+            $required ? 'required' : 'nullable',
+            'string',
+            "max:{$max}",
+            'email',
+            'regex:'.self::EMAIL,
+        ];
     }
 
     public static function roleName(bool $required = true, int $max = 30): array
@@ -67,7 +80,15 @@ class FieldRules
             'identificacion_fiscal.regex' => 'La identificación fiscal solo admite letras, números y guiones.',
             'razon_social.regex' => 'La razón social no admite signos especiales.',
             'contacto.regex' => 'El contacto solo admite letras y espacios.',
-            'telefono.regex' => 'El teléfono solo admite números, espacios y guiones.',
+            'telefono.max' => 'El teléfono no puede tener más de 8 caracteres.',
+            'telefono.regex' => 'El teléfono solo admite hasta 8 números.',
+            'correo.email' => 'El correo debe tener un formato válido, por ejemplo nombre@dominio.com.',
+            'correo.regex' => 'El correo debe tener un formato válido, por ejemplo nombre@dominio.com.',
+            'correo.unique' => 'El correo ya está registrado.',
+            'sku.unique' => 'El SKU ya está registrado.',
+            'identificacion.unique' => 'La identificación ya está registrada.',
+            'identificacion_fiscal.unique' => 'La identificación fiscal ya está registrada.',
+            'nombre.unique' => 'Ese nombre ya está registrado.',
             'descripcion.regex' => 'La descripción no admite signos especiales.',
         ];
     }

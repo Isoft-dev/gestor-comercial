@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { CircleAlert, Cpu, LockKeyhole, LogIn, Mail } from '@lucide/vue'
 
@@ -42,7 +43,7 @@ async function submit() {
         <label>Correo
           <span class="field-icon">
             <Mail :size="16" :stroke-width="2" />
-            <input v-model="correo" type="email" required autocomplete="username" />
+            <input v-model="correo" type="email" required autocomplete="username" :pattern="fields.correo.pattern" :title="fields.correo.title" :maxlength="fields.correo.maxlength" />
           </span>
         </label>
         <label>Contraseña

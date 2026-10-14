@@ -333,7 +333,7 @@ class TechStoreFlowTest extends TestCase
             'identificacion' => 'DPI-908070',
             'primer_nombre' => 'Laura',
             'primer_apellido' => 'Morales',
-            'telefono' => '5555-3333',
+            'telefono' => '55553333',
         ])->assertOk();
 
         $this->getJson('/api/catalogos/clientes?buscar=Morales')
@@ -812,6 +812,47 @@ class TechStoreFlowTest extends TestCase
             'identificacion' => 'DPI-111222',
             'primer_nombre' => 'Ana#',
             'primer_apellido' => 'Lopez',
+        ])->assertUnprocessable();
+    }
+
+    public function test_phone_cannot_exceed_eight_characters(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+
+        $this->postJson('/api/catalogos/clientes', [
+            'identificacion' => 'DPI-333444',
+            'primer_nombre' => 'Laura',
+            'primer_apellido' => 'Méndez',
+            'telefono' => '555533339',
+        ])->assertUnprocessable();
+
+        $this->postJson('/api/catalogos/proveedores', [
+            'identificacion_fiscal' => 'NIT-PHONE-001',
+            'razon_social' => 'Proveedor Demo',
+            'telefono' => '5555-3333',
+        ])->assertUnprocessable();
+    }
+
+    public function test_email_must_follow_valid_structure(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $role = DB::table('TEC_ROL')->where('ROL_Nombre', 'OPERADOR')->value('ROL_Rol');
+
+        $this->postJson('/api/catalogos/clientes', [
+            'identificacion' => 'DPI-555666',
+            'primer_nombre' => 'Laura',
+            'primer_apellido' => 'Méndez',
+            'correo' => 'correo-invalido',
+        ])->assertUnprocessable();
+
+        $this->postJson('/api/usuarios', [
+            'rol_id' => $role,
+            'primer_nombre' => 'Juan',
+            'primer_apellido' => 'Pérez',
+            'correo' => 'juan.sin-dominio',
+            'contrasena' => 'Password2026!',
         ])->assertUnprocessable();
     }
 

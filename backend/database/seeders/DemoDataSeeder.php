@@ -61,18 +61,18 @@ class DemoDataSeeder extends Seeder
     private function seedClients(\DateTimeInterface|string $now): void
     {
         $clients = [
-            ['DEMO-CLI-001', 'Mariana', null, 'Gómez', 'López', 'mariana.gomez@clientes.test', '5555-1001'],
-            ['DEMO-CLI-002', 'Carlos', 'Andrés', 'Méndez', 'Ruiz', 'carlos.mendez@clientes.test', '5555-1002'],
-            ['DEMO-CLI-003', 'Daniela', null, 'Hernández', 'Paz', 'daniela.hernandez@clientes.test', '5555-1003'],
-            ['DEMO-CLI-004', 'José', 'Manuel', 'Castillo', 'Reyes', 'jose.castillo@clientes.test', '5555-1004'],
-            ['DEMO-CLI-005', 'Andrea', null, 'Morales', 'Díaz', 'andrea.morales@clientes.test', '5555-1005'],
-            ['DEMO-CLI-006', 'Luis', 'Fernando', 'Ramírez', 'Cruz', 'luis.ramirez@clientes.test', '5555-1006'],
-            ['DEMO-CLI-007', 'Paola', null, 'Vásquez', 'León', 'paola.vasquez@clientes.test', '5555-1007'],
-            ['DEMO-CLI-008', 'Miguel', 'Ángel', 'Rojas', 'Pineda', 'miguel.rojas@clientes.test', '5555-1008'],
-            ['DEMO-CLI-009', 'Valeria', null, 'Fuentes', 'Navas', 'valeria.fuentes@clientes.test', '5555-1009'],
-            ['DEMO-CLI-010', 'Pedro', 'Pablo', 'Aguilar', 'Soto', 'pedro.aguilar@clientes.test', '5555-1010'],
-            ['DEMO-CLI-011', 'Fernanda', null, 'Ochoa', 'Lara', 'fernanda.ochoa@clientes.test', '5555-1011'],
-            ['DEMO-CLI-012', 'Ricardo', null, 'Delgado', 'Mora', 'ricardo.delgado@clientes.test', '5555-1012'],
+            ['DEMO-CLI-001', 'Mariana', null, 'Gómez', 'López', 'mariana.gomez@clientes.test', '55551001'],
+            ['DEMO-CLI-002', 'Carlos', 'Andrés', 'Méndez', 'Ruiz', 'carlos.mendez@clientes.test', '55551002'],
+            ['DEMO-CLI-003', 'Daniela', null, 'Hernández', 'Paz', 'daniela.hernandez@clientes.test', '55551003'],
+            ['DEMO-CLI-004', 'José', 'Manuel', 'Castillo', 'Reyes', 'jose.castillo@clientes.test', '55551004'],
+            ['DEMO-CLI-005', 'Andrea', null, 'Morales', 'Díaz', 'andrea.morales@clientes.test', '55551005'],
+            ['DEMO-CLI-006', 'Luis', 'Fernando', 'Ramírez', 'Cruz', 'luis.ramirez@clientes.test', '55551006'],
+            ['DEMO-CLI-007', 'Paola', null, 'Vásquez', 'León', 'paola.vasquez@clientes.test', '55551007'],
+            ['DEMO-CLI-008', 'Miguel', 'Ángel', 'Rojas', 'Pineda', 'miguel.rojas@clientes.test', '55551008'],
+            ['DEMO-CLI-009', 'Valeria', null, 'Fuentes', 'Navas', 'valeria.fuentes@clientes.test', '55551009'],
+            ['DEMO-CLI-010', 'Pedro', 'Pablo', 'Aguilar', 'Soto', 'pedro.aguilar@clientes.test', '55551010'],
+            ['DEMO-CLI-011', 'Fernanda', null, 'Ochoa', 'Lara', 'fernanda.ochoa@clientes.test', '55551011'],
+            ['DEMO-CLI-012', 'Ricardo', null, 'Delgado', 'Mora', 'ricardo.delgado@clientes.test', '55551012'],
         ];
 
         foreach ($clients as [$identification, $firstName, $secondName, $firstSurname, $secondSurname, $email, $phone]) {
@@ -140,6 +140,17 @@ class DemoDataSeeder extends Seeder
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
+
+            if ($minimum > 0) {
+                DB::table('TEC_ALERTA')->insert([
+                    'PRO_Producto' => $productId,
+                    'ALE_Tipo' => 'INVENTARIO_MINIMO',
+                    'ALE_Estado' => 'ACTIVA',
+                    'ALE_Fecha_Generacion' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
         }
     }
 

@@ -263,7 +263,7 @@ class CatalogController extends ApiController
             'segundo_nombre' => FieldRules::personName(false),
             'primer_apellido' => FieldRules::personName(),
             'segundo_apellido' => FieldRules::personName(false),
-            'correo' => ['required', 'email', 'max:120', 'unique:TEC_USUARIO,USU_Correo'],
+            'correo' => [...FieldRules::email(true), 'unique:TEC_USUARIO,USU_Correo'],
             'contrasena' => PasswordRules::required(),
         ], [
             ...FieldRules::messages(),
@@ -301,7 +301,7 @@ class CatalogController extends ApiController
             'segundo_nombre' => FieldRules::personName(false),
             'primer_apellido' => FieldRules::personName(),
             'segundo_apellido' => FieldRules::personName(false),
-            'correo' => ['required', 'email', 'max:120', Rule::unique('TEC_USUARIO', 'USU_Correo')->ignore($id, 'USU_Usuario')],
+            'correo' => [...FieldRules::email(true), Rule::unique('TEC_USUARIO', 'USU_Correo')->ignore($id, 'USU_Usuario')],
             'contrasena' => PasswordRules::optional(),
         ], [
             ...FieldRules::messages(),
@@ -390,7 +390,7 @@ class CatalogController extends ApiController
             'segundo_nombre' => FieldRules::personName(false),
             'primer_apellido' => FieldRules::personName(),
             'segundo_apellido' => FieldRules::personName(false),
-            'correo' => ['nullable', 'email', 'max:120'],
+            'correo' => FieldRules::email(),
             'telefono' => FieldRules::phone(),
         ], FieldRules::messages());
 
@@ -413,7 +413,7 @@ class CatalogController extends ApiController
             'razon_social' => FieldRules::companyName(),
             'contacto' => FieldRules::personName(false, 120),
             'telefono' => FieldRules::phone(),
-            'correo' => ['nullable', 'email', 'max:120'],
+            'correo' => FieldRules::email(),
         ], FieldRules::messages());
 
         return [

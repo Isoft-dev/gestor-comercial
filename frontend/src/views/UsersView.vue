@@ -138,7 +138,7 @@ onMounted(load)
         <label>Segundo nombre<input v-model="form.segundo_nombre" maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.segundo_nombre = fields.persona.clean($event.target.value)" /></label>
         <label>Primer apellido<input v-model="form.primer_apellido" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.primer_apellido = fields.persona.clean($event.target.value)" /></label>
         <label>Segundo apellido<input v-model="form.segundo_apellido" maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.segundo_apellido = fields.persona.clean($event.target.value)" /></label>
-        <label>Correo<input v-model="form.correo" type="email" required /></label>
+        <label>Correo<input v-model="form.correo" type="email" required :maxlength="fields.correo.maxlength" :pattern="fields.correo.pattern" :title="fields.correo.title" @input="form.correo = fields.correo.clean($event.target.value)" /></label>
         <label>Contraseña
           <input v-model="form.contrasena" type="password" minlength="10" :required="!editingId" />
           <small class="muted">{{ editingId ? 'Déjela vacía para conservar la actual.' : 'Mínimo 10 caracteres, mayúscula, minúscula, número y símbolo.' }}</small>
