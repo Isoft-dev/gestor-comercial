@@ -5,14 +5,19 @@ import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { fields as masks } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
-import { Ban, Building2, CircleAlert, CircleCheck, Layers, Pencil, Save, Tags, X } from '@lucide/vue'
+import { Ban, Building2, CircleAlert, CircleCheck, Layers, Pencil, Save, Search, Tags, X } from '@lucide/vue'
 
 const route = useRoute()
 const auth = useAuthStore()
 const items = ref([])
+const providerOptions = ref([])
 const message = ref('')
 const error = ref('')
 const editingId = ref(null)
+const search = ref('')
+const statusFilter = ref('todos')
+const page = ref(1)
+const pagination = ref({ current_page: 1, last_page: 1, total: 0 })
 const form = reactive({})
 
 const definitions = {
@@ -76,11 +81,34 @@ function fill(item) {
 async function load() {
   error.value = ''
   try {
-    const { data } = await api.get(`/catalogos/${type.value}`)
+    const params = { page: page.value }
+    if (type.value === 'proveedores') {
+      params.buscar = search.value
+      params.estado = statusFilter.value
+      params.por_pagina = 20
+      if (!providerOptions.value.length) params.con_opciones = 1
+    }
+    const { data } = await api.get(`/catalogos/${type.value}`, { params })
     items.value = data.data
+    pagination.value = {
+      current_page: data.current_page || 1,
+      last_page: data.last_page || 1,
+      total: data.total || 0,
+    }
+    if (data.opciones) providerOptions.value = data.opciones
   } catch (requestError) {
     error.value = requestError.userMessage
   }
+}
+
+function searchProviders() {
+  page.value = 1
+  load()
+}
+
+function changePage(nextPage) {
+  page.value = nextPage
+  load()
 }
 
 async function submit() {
@@ -137,7 +165,14 @@ async function changeState(item, active) {
   }
 }
 
-watch(type, () => { reset(); load() }, { immediate: true })
+watch(type, () => {
+  reset()
+  search.value = ''
+  statusFilter.value = 'todos'
+  page.value = 1
+  providerOptions.value = []
+  load()
+}, { immediate: true })
 </script>
 
 <template>
@@ -178,13 +213,49 @@ watch(type, () => { reset(); load() }, { immediate: true })
     </form>
     <section class="panel">
       <div class="panel-heading"><Layers :size="18" /><h2>Registros</h2></div>
+      <form v-if="type === 'proveedores'" class="filter-bar" @submit.prevent="searchProviders">
+        <label>Buscar proveedor
+          <input v-model="search" list="provider-options" type="search" placeholder="Nombre o razón social" />
+          <datalist id="provider-options">
+            <option
+              v-for="provider in providerOptions"
+              :key="provider.PRV_Identificacion_Fiscal"
+              :value="provider.PRV_Razon_Social"
+              :label="provider.PRV_Identificacion_Fiscal"
+            />
+          </datalist>
+        </label>
+        <label>Estado
+          <select v-model="statusFilter" @change="searchProviders">
+            <option value="todos">Todos</option>
+            <option value="activos">Activos</option>
+            <option value="inactivos">Inactivos</option>
+          </select>
+        </label>
+        <button class="button primary" type="submit"><Search :size="16" /> Consultar</button>
+      </form>
+      <p v-if="type === 'proveedores'" class="muted">Proveedores encontrados: {{ pagination.total }}</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Identificador</th><th>Nombre</th><th>Estado</th><th>Acción</th></tr></thead>
+          <thead>
+            <tr v-if="type === 'proveedores'">
+              <th>Identificación fiscal</th><th>Razón social</th><th>Contacto</th><th>Correo</th><th>Teléfono</th><th>Estado</th><th>Acción</th>
+            </tr>
+            <tr v-else><th>Identificador</th><th>Nombre</th><th>Estado</th><th>Acción</th></tr>
+          </thead>
           <tbody>
             <tr v-for="item in items" :key="item[idKey]">
-              <td class="mono">{{ item.PRV_Identificacion_Fiscal || item.CAT_Categoria || item.MAR_Marca }}</td>
-              <td>{{ item.PRV_Razon_Social || item.CAT_Nombre || item.MAR_Nombre }}</td>
+              <template v-if="type === 'proveedores'">
+                <td class="mono">{{ item.PRV_Identificacion_Fiscal }}</td>
+                <td>{{ item.PRV_Razon_Social }}</td>
+                <td>{{ item.PRV_Contacto || '—' }}</td>
+                <td>{{ item.PRV_Correo || '—' }}</td>
+                <td>{{ item.PRV_Telefono || '—' }}</td>
+              </template>
+              <template v-else>
+                <td class="mono">{{ item.PRV_Identificacion_Fiscal || item.CAT_Categoria || item.MAR_Marca }}</td>
+                <td>{{ item.PRV_Razon_Social || item.CAT_Nombre || item.MAR_Nombre }}</td>
+              </template>
               <td><span class="status" :class="{ off: !isActive(item) }">{{ isActive(item) ? 'Activo' : 'Inactivo' }}</span></td>
               <td class="actions">
                 <button v-if="auth.can('CATALOGOS.GESTIONAR')" class="link" type="button" @click="fill(item)"><Pencil :size="14" /> Editar</button>
@@ -196,8 +267,16 @@ watch(type, () => { reset(); load() }, { immediate: true })
                 </button>
               </td>
             </tr>
+            <tr v-if="items.length === 0">
+              <td :colspan="type === 'proveedores' ? 7 : 4">No hay registros que coincidan con la búsqueda.</td>
+            </tr>
           </tbody>
         </table>
+      </div>
+      <div v-if="type === 'proveedores' && pagination.last_page > 1" class="actions pagination">
+        <button class="button secondary" type="button" :disabled="page <= 1" @click="changePage(page - 1)">Anterior</button>
+        <span class="muted">Página {{ pagination.current_page }} de {{ pagination.last_page }}</span>
+        <button class="button secondary" type="button" :disabled="page >= pagination.last_page" @click="changePage(page + 1)">Siguiente</button>
       </div>
     </section>
   </section>

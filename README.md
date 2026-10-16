@@ -83,6 +83,8 @@ Reinicia Apache y abre `http://techstore.local`.
 
 Si quieres recarga en caliente, sin Apache:
 
+Antes de iniciar el backend, inicia **MySQL** desde el panel de XAMPP. El servidor PHP debe cargarse con el `php.ini` del proyecto para habilitar `pdo_mysql`.
+
 ```powershell
 # Terminal 1: API (el directorio actual debe ser backend\public)
 cd backend\public

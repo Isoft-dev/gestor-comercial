@@ -108,7 +108,7 @@ class PurchaseController extends ApiController
         $this->requirePermission($request, 'COMPRAS.REGISTRAR');
         $data = $request->validate(['observacion' => ['nullable', 'string', 'max:1000']]);
 
-        DB::transaction(function () use ($request, $id, $data) {
+        $receiptId = DB::transaction(function () use ($request, $id, $data) {
             $purchase = DB::table('TEC_COMPRA as c')
                 ->join('TEC_ESTADO_COMPRA as e', 'e.ESC_Estado_Compra', '=', 'c.ESC_Estado_Compra')
                 ->where('c.COM_Compra', $id)
@@ -128,11 +128,15 @@ class PurchaseController extends ApiController
             ], 'REC_Recepcion');
 
             $details = DB::table('TEC_DETALLE_COMPRA')->where('COM_Compra', $id)->get();
+            abort_if($details->isEmpty(), 422, 'La compra no tiene productos para recibir.');
+
             foreach ($details as $detail) {
                 $inventory = DB::table('TEC_INVENTARIO')
                     ->where('PRO_Producto', $detail->PRO_Producto)
                     ->lockForUpdate()
                     ->first();
+                abort_unless($inventory, 409, 'No existe inventario para uno de los productos de la compra.');
+
                 $before = (int) $inventory->INV_Existencia;
                 $after = $before + (int) $detail->DCO_Cantidad;
                 DB::table('TEC_INVENTARIO')->where('INV_Inventario', $inventory->INV_Inventario)->update([
@@ -160,10 +164,122 @@ class PurchaseController extends ApiController
                 'ESC_Estado_Compra' => Catalogos::estadoCompra('RECIBIDA'),
                 'updated_at' => now(),
             ]);
+
+            return $receipt;
         });
 
         $this->audit($request, 'COMPRAS', 'RECIBIR', $id);
 
-        return response()->json(['message' => 'Compra recibida e inventario actualizado.']);
+        return response()->json([
+            'id' => $receiptId,
+            'message' => 'Compra recibida e inventario actualizado.',
+        ]);
+    }
+
+    public function receipts(Request $request): JsonResponse
+    {
+        $this->requirePermission($request, 'COMPRAS.REGISTRAR');
+        $filters = $request->validate([
+            'buscar' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'desde' => ['sometimes', 'date_format:Y-m-d'],
+            'hasta' => ['sometimes', 'date_format:Y-m-d'],
+        ]);
+        $query = DB::table('TEC_RECEPCION as r')
+            ->join('TEC_COMPRA as c', 'c.COM_Compra', '=', 'r.COM_Compra')
+            ->join('TEC_PROVEEDOR as p', 'p.PRV_Proveedor', '=', 'c.PRV_Proveedor')
+            ->join('TEC_USUARIO as u', 'u.USU_Usuario', '=', 'r.USU_Usuario')
+            ->select(
+                'r.REC_Recepcion',
+                'r.COM_Compra',
+                'r.REC_Fecha',
+                'r.REC_Observacion',
+                'c.COM_Total',
+                'p.PRV_Razon_Social',
+                'p.PRV_Identificacion_Fiscal',
+                'u.USU_Primer_Nombre',
+                'u.USU_Primer_Apellido',
+            );
+
+        if (($filters['buscar'] ?? '') !== '') {
+            $search = trim($filters['buscar']);
+            $query->where(function ($builder) use ($search) {
+                $builder->where('p.PRV_Razon_Social', 'like', "%{$search}%")
+                    ->orWhere('p.PRV_Identificacion_Fiscal', 'like', "%{$search}%")
+                    ->orWhere('r.REC_Observacion', 'like', "%{$search}%")
+                    ->orWhere('u.USU_Primer_Nombre', 'like', "%{$search}%")
+                    ->orWhere('u.USU_Segundo_Nombre', 'like', "%{$search}%")
+                    ->orWhere('u.USU_Primer_Apellido', 'like', "%{$search}%")
+                    ->orWhere('u.USU_Segundo_Apellido', 'like', "%{$search}%");
+                if (ctype_digit($search)) {
+                    $builder->orWhere('r.REC_Recepcion', (int) $search)
+                        ->orWhere('r.COM_Compra', (int) $search);
+                }
+                $builder->orWhereExists(function ($details) use ($search) {
+                    $details->selectRaw('1')
+                        ->from('TEC_DETALLE_COMPRA as d')
+                        ->join('TEC_PRODUCTO as pr', 'pr.PRO_Producto', '=', 'd.PRO_Producto')
+                        ->whereColumn('d.COM_Compra', 'r.COM_Compra')
+                        ->where(function ($productSearch) use ($search) {
+                            $productSearch->where('pr.PRO_SKU', 'like', "%{$search}%")
+                                ->orWhere('pr.PRO_Nombre', 'like', "%{$search}%");
+                        });
+                });
+            });
+        }
+
+        if (isset($filters['desde'])) {
+            $query->where('r.REC_Fecha', '>=', $filters['desde'].' 00:00:00');
+        }
+        if (isset($filters['hasta'])) {
+            $query->where('r.REC_Fecha', '<=', $filters['hasta'].' 23:59:59');
+        }
+
+        return response()->json($query->orderByDesc('r.REC_Fecha')->paginate(20));
+    }
+
+    public function receipt(Request $request, int $id): JsonResponse
+    {
+        $this->requirePermission($request, 'COMPRAS.REGISTRAR');
+        $receipt = DB::table('TEC_RECEPCION as r')
+            ->join('TEC_COMPRA as c', 'c.COM_Compra', '=', 'r.COM_Compra')
+            ->join('TEC_PROVEEDOR as p', 'p.PRV_Proveedor', '=', 'c.PRV_Proveedor')
+            ->join('TEC_USUARIO as u', 'u.USU_Usuario', '=', 'r.USU_Usuario')
+            ->where('r.REC_Recepcion', $id)
+            ->select(
+                'r.REC_Recepcion',
+                'r.COM_Compra',
+                'r.REC_Fecha',
+                'r.REC_Observacion',
+                'c.COM_Fecha',
+                'c.COM_Total',
+                'c.COM_Observacion',
+                'p.PRV_Identificacion_Fiscal',
+                'p.PRV_Razon_Social',
+                'p.PRV_Contacto',
+                'p.PRV_Correo',
+                'p.PRV_Telefono',
+                'u.USU_Primer_Nombre',
+                'u.USU_Segundo_Nombre',
+                'u.USU_Primer_Apellido',
+                'u.USU_Segundo_Apellido',
+            )
+            ->first();
+        abort_unless($receipt, 404, 'Recepción no encontrada.');
+
+        $receipt->detalles = DB::table('TEC_DETALLE_COMPRA as d')
+            ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'd.PRO_Producto')
+            ->where('d.COM_Compra', $receipt->COM_Compra)
+            ->orderBy('p.PRO_Nombre')
+            ->get([
+                'd.DCO_Detalle_Compra',
+                'd.PRO_Producto',
+                'p.PRO_SKU',
+                'p.PRO_Nombre',
+                'd.DCO_Cantidad',
+                'd.DCO_Costo_Unitario',
+                'd.DCO_Subtotal',
+            ]);
+
+        return response()->json($receipt);
     }
 }

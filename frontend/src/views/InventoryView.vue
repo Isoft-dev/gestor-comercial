@@ -53,6 +53,25 @@ onMounted(load)
     <TriangleAlert :size="16" />
     <span><strong>{{ alerts.length }} alerta(s) activa(s).</strong> Existen productos en su nivel mínimo.</span>
   </section>
+  <section class="panel">
+    <div class="panel-heading"><TriangleAlert :size="18" /><h2>Alertas de inventario</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha de alerta</th><th>SKU</th><th>Producto</th><th>Existencia actual</th><th>Mínimo requerido</th><th>Estado</th></tr></thead>
+      <tbody>
+        <tr v-for="alert in alerts" :key="alert.ALE_Alerta" class="critical">
+          <td>{{ alert.ALE_Fecha_Generacion }}</td>
+          <td class="mono">{{ alert.PRO_SKU }}</td>
+          <td>{{ alert.PRO_Nombre }}</td>
+          <td>{{ alert.INV_Existencia }}</td>
+          <td>{{ alert.PRO_Existencia_Minima }}</td>
+          <td><span class="status off">Activa</span></td>
+        </tr>
+        <tr v-if="alerts.length === 0">
+          <td colspan="6">No hay alertas activas. Las existencias están sobre el mínimo establecido.</td>
+        </tr>
+      </tbody>
+    </table></div>
+  </section>
   <form v-if="auth.can('INVENTARIO.AJUSTAR')" class="panel compact-form" @submit.prevent="submitAdjustment">
     <div class="panel-heading"><SlidersHorizontal :size="18" /><h2>Ajuste supervisado</h2></div>
     <label>Producto<select v-model="adjustment.producto_id" required><option value="">Seleccione</option><option v-for="item in stock" :key="item.PRO_Producto" :value="item.PRO_Producto">{{ item.PRO_SKU }} · {{ item.PRO_Nombre }}</option></select></label>
