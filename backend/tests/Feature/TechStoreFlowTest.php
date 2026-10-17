@@ -667,6 +667,51 @@ class TechStoreFlowTest extends TestCase
         ])->assertOk();
     }
 
+    public function test_receiving_a_purchase_is_atomic_and_receipts_can_be_searched_and_viewed(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $provider = DB::table('TEC_PROVEEDOR')->value('PRV_Proveedor');
+        $product = DB::table('TEC_PRODUCTO')->value('PRO_Producto');
+        $sku = DB::table('TEC_PRODUCTO')->where('PRO_Producto', $product)->value('PRO_SKU');
+        $initialStock = (int) DB::table('TEC_INVENTARIO')->where('PRO_Producto', $product)->value('INV_Existencia');
+
+        $purchaseId = $this->postJson('/api/compras', [
+        'proveedor_id' => $provider,
+        'detalles' => [[
+            'producto_id' => $product,
+            'cantidad' => 4,
+            'costo_unitario' => 12,
+        ]],
+        ])->assertCreated()->json('id');
+
+        $receiptId = $this->postJson("/api/compras/{$purchaseId}/recibir")
+        ->assertOk()
+        ->json('id');
+
+        $this->postJson("/api/compras/{$purchaseId}/recibir")
+        ->assertStatus(409);
+
+        $this->assertDatabaseHas('TEC_INVENTARIO', [
+        'PRO_Producto' => $product,
+        'INV_Existencia' => $initialStock + 4,
+        ]);
+        $this->assertDatabaseCount('TEC_RECEPCION', 1);
+
+        $this->getJson("/api/recepciones?buscar={$sku}")
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.REC_Recepcion', $receiptId)
+        ->assertJsonPath('data.0.COM_Compra', $purchaseId);
+
+        $this->getJson("/api/recepciones/{$receiptId}")
+        ->assertOk()
+        ->assertJsonPath('REC_Recepcion', $receiptId)
+        ->assertJsonPath('COM_Compra', $purchaseId)
+        ->assertJsonPath('detalles.0.PRO_SKU', $sku)
+        ->assertJsonPath('detalles.0.DCO_Cantidad', 4);
+    }
+
     public function test_password_must_be_strong_and_users_cannot_be_deleted(): void
     {
         $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
@@ -832,6 +877,33 @@ class TechStoreFlowTest extends TestCase
             'razon_social' => 'Proveedor Demo',
             'telefono' => '5555-3333',
         ])->assertUnprocessable();
+    }
+
+    public function test_provider_catalog_searches_contact_details_and_filters_by_state(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $providerId = DB::table('TEC_PROVEEDOR')->value('PRV_Proveedor');
+
+        $this->getJson('/api/catalogos/proveedores?buscar=Digital&con_opciones=1')
+            ->assertOk()
+            ->assertJsonPath('data.0.PRV_Identificacion_Fiscal', 'NIT-TECH-001')
+            ->assertJsonPath('data.0.PRV_Razon_Social', 'Distribuidora Digital, S. A.')
+            ->assertJsonPath('data.0.PRV_Contacto', 'María Proveedora')
+            ->assertJsonPath('data.0.PRV_Correo', 'ventas@distribuidora.test')
+            ->assertJsonPath('data.0.PRV_Telefono', '55550202')
+            ->assertJsonPath('opciones.0.PRV_Razon_Social', 'Distribuidora Digital, S. A.');
+
+        DB::table('TEC_PROVEEDOR')->where('PRV_Proveedor', $providerId)->update(['PRV_Estado' => false]);
+
+        $this->getJson('/api/catalogos/proveedores?estado=activos')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->getJson('/api/catalogos/proveedores?estado=inactivos')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.PRV_Estado', 0);
     }
 
     public function test_email_must_follow_valid_structure(): void

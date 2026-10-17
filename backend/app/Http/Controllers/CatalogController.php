@@ -33,7 +33,15 @@ class CatalogController extends ApiController
         $search = trim((string) $request->query('buscar', ''));
 
         if ($search !== '') {
-            if ($type === 'clientes') {
+            if ($type === 'proveedores') {
+                $query->where(function ($builder) use ($search) {
+                    $builder->where('PRV_Identificacion_Fiscal', 'like', "%{$search}%")
+                        ->orWhere('PRV_Razon_Social', 'like', "%{$search}%")
+                        ->orWhere('PRV_Contacto', 'like', "%{$search}%")
+                        ->orWhere('PRV_Correo', 'like', "%{$search}%")
+                        ->orWhere('PRV_Telefono', 'like', "%{$search}%");
+                });
+            } elseif ($type === 'clientes') {
                 $query->where(function ($builder) use ($search) {
                     $builder->where('CLI_Identificacion', 'like', "%{$search}%")
                         ->orWhere('CLI_Primer_Nombre', 'like', "%{$search}%")
@@ -51,6 +59,15 @@ class CatalogController extends ApiController
                 });
             } else {
                 $query->where($config['name'], 'like', "%{$search}%");
+            }
+        }
+
+        if ($type === 'proveedores') {
+            $request->validate(['estado' => ['sometimes', 'in:todos,activos,inactivos']]);
+            if ($request->query('estado') === 'activos') {
+                $query->where('PRV_Estado', true);
+            } elseif ($request->query('estado') === 'inactivos') {
+                $query->where('PRV_Estado', false);
             }
         }
 
@@ -88,19 +105,25 @@ class CatalogController extends ApiController
                 return $product;
             });
         }
-        if (! $request->boolean('con_opciones') || $type !== 'productos') {
+        if (! $request->boolean('con_opciones') || ! in_array($type, ['productos', 'proveedores'], true)) {
             return response()->json($page);
         }
 
         $payload = $page->toArray();
-        $payload['categorias'] = DB::table('TEC_CATEGORIA')
-            ->where('CAT_Estado', true)
-            ->orderBy('CAT_Nombre')
-            ->get(['CAT_Categoria', 'CAT_Nombre']);
-        $payload['marcas'] = DB::table('TEC_MARCA')
-            ->where('MAR_Estado', true)
-            ->orderBy('MAR_Nombre')
-            ->get(['MAR_Marca', 'MAR_Nombre']);
+        if ($type === 'productos') {
+            $payload['categorias'] = DB::table('TEC_CATEGORIA')
+                ->where('CAT_Estado', true)
+                ->orderBy('CAT_Nombre')
+                ->get(['CAT_Categoria', 'CAT_Nombre']);
+            $payload['marcas'] = DB::table('TEC_MARCA')
+                ->where('MAR_Estado', true)
+                ->orderBy('MAR_Nombre')
+                ->get(['MAR_Marca', 'MAR_Nombre']);
+        } else {
+            $payload['opciones'] = DB::table('TEC_PROVEEDOR')
+                ->orderBy('PRV_Razon_Social')
+                ->get(['PRV_Razon_Social', 'PRV_Identificacion_Fiscal']);
+        }
 
         return response()->json($payload);
     }
