@@ -2,7 +2,8 @@
 import { onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { useAuthStore } from '../stores/auth'
-import { CircleAlert, CircleCheck, RefreshCw, SlidersHorizontal, TriangleAlert, Warehouse } from '@lucide/vue'
+import { CircleAlert, CircleCheck, RefreshCw, Search, SlidersHorizontal, TriangleAlert, Warehouse } from '@lucide/vue'
+import SortHeader from '../components/SortHeader.vue'
 
 const auth = useAuthStore()
 const stock = ref([])
@@ -11,10 +12,23 @@ const alerts = ref([])
 const error = ref('')
 const message = ref('')
 const adjustment = reactive({ producto_id: '', tipo: 'AJUSTE_ENTRADA', cantidad: 1, motivo: '' })
+const search = ref('')
+const stockFilter = ref('todos')
+const sort = ref('id')
+const direction = ref('asc')
 
 async function load() {
   try {
-    const { data } = await api.get('/inventario', { params: { completo: 1 } })
+    const { data } = await api.get('/inventario', {
+      params: {
+        completo: 1,
+        por_pagina: 100,
+        buscar: search.value || undefined,
+        stock: stockFilter.value,
+        orden: sort.value,
+        direccion: direction.value,
+      },
+    })
     stock.value = data.stock.data
     movements.value = data.movimientos.data
     alerts.value = data.alertas
@@ -35,6 +49,15 @@ async function submitAdjustment() {
 }
 
 onMounted(load)
+
+function toggleSort(column) {
+  if (sort.value === column) direction.value = direction.value === 'asc' ? 'desc' : 'asc'
+  else {
+    sort.value = column
+    direction.value = 'asc'
+  }
+  load()
+}
 </script>
 
 <template>
@@ -49,6 +72,18 @@ onMounted(load)
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
+  <form class="filter-bar" @submit.prevent="load">
+    <label>Buscar
+      <input v-model="search" type="search" placeholder="ID, SKU o producto" />
+    </label>
+    <label>Stock
+      <select v-model="stockFilter" @change="load">
+        <option value="todos">Todo</option>
+        <option value="bajo">Bajo mínimo</option>
+      </select>
+    </label>
+    <button class="button primary" type="submit"><Search :size="16" /> Consultar</button>
+  </form>
   <section v-if="alerts.length" class="alert warning">
     <TriangleAlert :size="16" />
     <span><strong>{{ alerts.length }} alerta(s) activa(s).</strong> Existen productos en su nivel mínimo.</span>
@@ -82,8 +117,18 @@ onMounted(load)
   </form>
   <section class="panel">
     <div class="panel-heading"><Warehouse :size="18" /><h2>Existencias actuales</h2></div>
-    <div class="table-wrap"><table><thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Existencia</th><th>Mínimo</th></tr></thead>
-      <tbody><tr v-for="item in stock" :key="item.PRO_Producto" :class="{ critical: item.bajo_minimo }"><td class="mono">{{ item.PRO_SKU }}</td><td>{{ item.PRO_Nombre }}</td><td>{{ item.CAT_Nombre }}</td><td>{{ item.INV_Existencia }}</td><td>{{ item.PRO_Existencia_Minima }}</td></tr></tbody>
+    <div class="table-wrap"><table><thead><tr>
+      <SortHeader label="ID" column="id" :sort="sort" :direction="direction" @sort="toggleSort" />
+      <SortHeader label="SKU" column="sku" :sort="sort" :direction="direction" @sort="toggleSort" />
+      <SortHeader label="Producto" column="nombre" :sort="sort" :direction="direction" @sort="toggleSort" />
+      <SortHeader label="Categoría" column="categoria" :sort="sort" :direction="direction" @sort="toggleSort" />
+      <SortHeader label="Existencia" column="existencia" :sort="sort" :direction="direction" @sort="toggleSort" />
+      <SortHeader label="Mínimo" column="minimo" :sort="sort" :direction="direction" @sort="toggleSort" />
+    </tr></thead>
+      <tbody>
+        <tr v-for="item in stock" :key="item.PRO_Producto" :class="{ critical: item.bajo_minimo }"><td class="mono">{{ item.PRO_Producto }}</td><td class="mono">{{ item.PRO_SKU }}</td><td>{{ item.PRO_Nombre }}</td><td>{{ item.CAT_Nombre }}</td><td>{{ item.INV_Existencia }}</td><td>{{ item.PRO_Existencia_Minima }}</td></tr>
+        <tr v-if="stock.length === 0"><td colspan="6">No hay existencias que coincidan con el filtro.</td></tr>
+      </tbody>
     </table></div>
   </section>
   <section class="panel">

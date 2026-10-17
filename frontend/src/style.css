@@ -485,6 +485,22 @@ th {
   text-transform: uppercase;
   letter-spacing: .06em;
 }
+.sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  font-weight: 800;
+}
+.sort-button[aria-sort="ascending"]::after { content: "↑"; }
+.sort-button[aria-sort="descending"]::after { content: "↓"; }
+.sort-button:hover { color: var(--ink); }
 td { padding: 12px; border-top: 1px solid #e4e9ef; vertical-align: top; }
 tr.critical td { background: #fff1f2; color: var(--danger); }
 tr.critical td:first-child { box-shadow: inset 3px 0 0 var(--danger); }

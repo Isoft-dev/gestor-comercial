@@ -5,10 +5,14 @@ import { askConfirm } from '../lib/dialog'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { Ban, CircleAlert, CircleCheck, Pencil, Save, Search, UserPlus, Users, X } from '@lucide/vue'
+import SortHeader from '../components/SortHeader.vue'
 
 const auth = useAuthStore()
 const items = ref([])
 const search = ref('')
+const statusFilter = ref('todos')
+const sort = ref('id')
+const direction = ref('asc')
 const message = ref('')
 const error = ref('')
 const editingId = ref(null)
@@ -41,7 +45,13 @@ async function load() {
   error.value = ''
   try {
     const { data } = await api.get('/catalogos/clientes', {
-      params: { buscar: search.value, por_pagina: 50 },
+      params: {
+        buscar: search.value,
+        por_pagina: 100,
+        estado: statusFilter.value,
+        orden: sort.value,
+        direccion: direction.value,
+      },
     })
     items.value = data.data
   } catch (requestError) {
@@ -114,6 +124,15 @@ async function changeState(item, active) {
 }
 
 onMounted(load)
+
+function toggleSort(column) {
+  if (sort.value === column) direction.value = direction.value === 'asc' ? 'desc' : 'asc'
+  else {
+    sort.value = column
+    direction.value = 'asc'
+  }
+  load()
+}
 </script>
 
 <template>
@@ -125,7 +144,14 @@ onMounted(load)
   </header>
   <form class="filter-bar" @submit.prevent="load">
     <label>Buscar
-      <input v-model="search" type="search" placeholder="Identificación o nombre" />
+      <input v-model="search" type="search" placeholder="ID, identificación o nombre" />
+    </label>
+    <label>Estado
+      <select v-model="statusFilter" @change="load">
+        <option value="todos">Todos</option>
+        <option value="activos">Activos</option>
+        <option value="inactivos">Inactivos</option>
+      </select>
     </label>
     <button class="button primary" type="submit"><Search :size="16" /> Consultar</button>
   </form>
@@ -157,15 +183,17 @@ onMounted(load)
         <table>
           <thead>
             <tr>
-              <th>Identificación</th>
-              <th>Nombre</th>
+              <SortHeader label="ID" column="id" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Identificación" column="identificacion" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Nombre" column="nombre" :sort="sort" :direction="direction" @sort="toggleSort" />
               <th>Contacto</th>
-              <th>Estado</th>
+              <SortHeader label="Estado" column="estado" :sort="sort" :direction="direction" @sort="toggleSort" />
               <th>Acción</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="item in items" :key="item.CLI_Cliente">
+              <td class="mono">{{ item.CLI_Cliente }}</td>
               <td class="mono">{{ item.CLI_Identificacion }}</td>
               <td>{{ fullName(item) }}</td>
               <td>{{ item.CLI_Correo || item.CLI_Telefono || '—' }}</td>

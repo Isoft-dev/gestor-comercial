@@ -6,6 +6,7 @@ import { askConfirm } from '../lib/dialog'
 import { fields as masks } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { Ban, Building2, CircleAlert, CircleCheck, Layers, Pencil, Save, Search, Tags, X } from '@lucide/vue'
+import SortHeader from '../components/SortHeader.vue'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -17,6 +18,8 @@ const editingId = ref(null)
 const search = ref('')
 const statusFilter = ref('todos')
 const page = ref(1)
+const sort = ref('id')
+const direction = ref('asc')
 const pagination = ref({ current_page: 1, last_page: 1, total: 0 })
 const form = reactive({})
 
@@ -81,13 +84,15 @@ function fill(item) {
 async function load() {
   error.value = ''
   try {
-    const params = { page: page.value }
-    if (type.value === 'proveedores') {
-      params.buscar = search.value
-      params.estado = statusFilter.value
-      params.por_pagina = 20
-      if (!providerOptions.value.length) params.con_opciones = 1
+    const params = {
+      page: page.value,
+      buscar: search.value,
+      estado: statusFilter.value,
+      por_pagina: 20,
+      orden: sort.value,
+      direccion: direction.value,
     }
+    if (type.value === 'proveedores' && !providerOptions.value.length) params.con_opciones = 1
     const { data } = await api.get(`/catalogos/${type.value}`, { params })
     items.value = data.data
     pagination.value = {
@@ -101,7 +106,17 @@ async function load() {
   }
 }
 
-function searchProviders() {
+function searchRecords() {
+  page.value = 1
+  load()
+}
+
+function toggleSort(column) {
+  if (sort.value === column) direction.value = direction.value === 'asc' ? 'desc' : 'asc'
+  else {
+    sort.value = column
+    direction.value = 'asc'
+  }
   page.value = 1
   load()
 }
@@ -170,6 +185,8 @@ watch(type, () => {
   search.value = ''
   statusFilter.value = 'todos'
   page.value = 1
+  sort.value = 'id'
+  direction.value = 'asc'
   providerOptions.value = []
   load()
 }, { immediate: true })
@@ -213,10 +230,10 @@ watch(type, () => {
     </form>
     <section class="panel">
       <div class="panel-heading"><Layers :size="18" /><h2>Registros</h2></div>
-      <form v-if="type === 'proveedores'" class="filter-bar" @submit.prevent="searchProviders">
-        <label>Buscar proveedor
-          <input v-model="search" list="provider-options" type="search" placeholder="Nombre o razón social" />
-          <datalist id="provider-options">
+      <form class="filter-bar" @submit.prevent="searchRecords">
+        <label>Buscar
+          <input v-model="search" :list="type === 'proveedores' ? 'provider-options' : undefined" type="search" placeholder="ID o nombre" />
+          <datalist v-if="type === 'proveedores'" id="provider-options">
             <option
               v-for="provider in providerOptions"
               :key="provider.PRV_Identificacion_Fiscal"
@@ -226,7 +243,7 @@ watch(type, () => {
           </datalist>
         </label>
         <label>Estado
-          <select v-model="statusFilter" @change="searchProviders">
+          <select v-model="statusFilter" @change="searchRecords">
             <option value="todos">Todos</option>
             <option value="activos">Activos</option>
             <option value="inactivos">Inactivos</option>
@@ -234,18 +251,31 @@ watch(type, () => {
         </label>
         <button class="button primary" type="submit"><Search :size="16" /> Consultar</button>
       </form>
-      <p v-if="type === 'proveedores'" class="muted">Proveedores encontrados: {{ pagination.total }}</p>
+      <p class="muted">Registros encontrados: {{ pagination.total }}</p>
       <div class="table-wrap">
         <table>
           <thead>
             <tr v-if="type === 'proveedores'">
-              <th>Identificación fiscal</th><th>Razón social</th><th>Contacto</th><th>Correo</th><th>Teléfono</th><th>Estado</th><th>Acción</th>
+              <SortHeader label="ID" column="id" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Identificación fiscal" column="identificacion" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Razón social" column="razon_social" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Contacto" column="contacto" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Correo" column="correo" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Teléfono" column="telefono" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Estado" column="estado" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <th>Acción</th>
             </tr>
-            <tr v-else><th>Identificador</th><th>Nombre</th><th>Estado</th><th>Acción</th></tr>
+            <tr v-else>
+              <SortHeader label="ID" column="id" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Nombre" column="nombre" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Estado" column="estado" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <th>Acción</th>
+            </tr>
           </thead>
           <tbody>
             <tr v-for="item in items" :key="item[idKey]">
               <template v-if="type === 'proveedores'">
+                <td class="mono">{{ item.PRV_Proveedor }}</td>
                 <td class="mono">{{ item.PRV_Identificacion_Fiscal }}</td>
                 <td>{{ item.PRV_Razon_Social }}</td>
                 <td>{{ item.PRV_Contacto || '—' }}</td>
@@ -268,12 +298,12 @@ watch(type, () => {
               </td>
             </tr>
             <tr v-if="items.length === 0">
-              <td :colspan="type === 'proveedores' ? 7 : 4">No hay registros que coincidan con la búsqueda.</td>
+              <td :colspan="type === 'proveedores' ? 8 : 4">No hay registros que coincidan con la búsqueda.</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <div v-if="type === 'proveedores' && pagination.last_page > 1" class="actions pagination">
+      <div v-if="pagination.last_page > 1" class="actions pagination">
         <button class="button secondary" type="button" :disabled="page <= 1" @click="changePage(page - 1)">Anterior</button>
         <span class="muted">Página {{ pagination.current_page }} de {{ pagination.last_page }}</span>
         <button class="button secondary" type="button" :disabled="page >= pagination.last_page" @click="changePage(page + 1)">Siguiente</button>

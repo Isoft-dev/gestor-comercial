@@ -5,6 +5,7 @@ import api from '../services/api'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { CircleAlert, CircleCheck, Pencil, Save, UserPlus, Users, X } from '@lucide/vue'
+import SortHeader from '../components/SortHeader.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -13,6 +14,10 @@ const roles = ref([])
 const error = ref('')
 const message = ref('')
 const editingId = ref(null)
+const search = ref('')
+const statusFilter = ref('todos')
+const sort = ref('id')
+const direction = ref('asc')
 const form = reactive(emptyForm())
 
 function emptyForm() {
@@ -28,6 +33,43 @@ function emptyForm() {
 }
 
 const selectableRoles = computed(() => roles.value.filter((role) => role.ROL_Estado || role.ROL_Rol == form.rol_id))
+
+const visibleUsers = computed(() => {
+  const term = search.value.trim().toLowerCase()
+  const rows = users.value.filter((user) => {
+    if (statusFilter.value === 'activos' && !user.estado) return false
+    if (statusFilter.value === 'inactivos' && user.estado) return false
+    if (!term) return true
+    const name = [user.primer_nombre, user.segundo_nombre, user.primer_apellido, user.segundo_apellido].filter(Boolean).join(' ').toLowerCase()
+    return String(user.id).includes(term)
+      || name.includes(term)
+      || user.correo.toLowerCase().includes(term)
+      || user.rol.toLowerCase().includes(term)
+  })
+  const factor = direction.value === 'asc' ? 1 : -1
+  const value = (user) => {
+    if (sort.value === 'nombre') return `${user.primer_nombre} ${user.primer_apellido}`.toLowerCase()
+    if (sort.value === 'correo') return user.correo.toLowerCase()
+    if (sort.value === 'rol') return user.rol.toLowerCase()
+    if (sort.value === 'estado') return user.estado ? 1 : 0
+    return Number(user.id)
+  }
+  return [...rows].sort((left, right) => {
+    const a = value(left)
+    const b = value(right)
+    if (a < b) return -1 * factor
+    if (a > b) return 1 * factor
+    return left.id - right.id
+  })
+})
+
+function toggleSort(column) {
+  if (sort.value === column) direction.value = direction.value === 'asc' ? 'desc' : 'asc'
+  else {
+    sort.value = column
+    direction.value = 'asc'
+  }
+}
 
 function reset() {
   editingId.value = null
@@ -156,9 +198,31 @@ onMounted(load)
     <section class="panel">
       <div class="panel-heading"><Users :size="18" /><h2>Usuarios registrados</h2></div>
       <p class="muted">Los usuarios no se eliminan: solo se desactivan.</p>
+      <form class="filter-bar" @submit.prevent>
+        <label>Buscar
+          <input v-model="search" type="search" placeholder="ID, nombre, correo o rol" />
+        </label>
+        <label>Estado
+          <select v-model="statusFilter">
+            <option value="todos">Todos</option>
+            <option value="activos">Activos</option>
+            <option value="inactivos">Inactivos</option>
+          </select>
+        </label>
+      </form>
       <div class="table-wrap"><table>
-        <thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Acceso</th><th>Acción</th></tr></thead>
-        <tbody><tr v-for="user in users" :key="user.id">
+        <thead><tr>
+          <SortHeader label="ID" column="id" :sort="sort" :direction="direction" @sort="toggleSort" />
+          <SortHeader label="Usuario" column="nombre" :sort="sort" :direction="direction" @sort="toggleSort" />
+          <SortHeader label="Correo" column="correo" :sort="sort" :direction="direction" @sort="toggleSort" />
+          <SortHeader label="Rol" column="rol" :sort="sort" :direction="direction" @sort="toggleSort" />
+          <SortHeader label="Estado" column="estado" :sort="sort" :direction="direction" @sort="toggleSort" />
+          <th>Acceso</th>
+          <th>Acción</th>
+        </tr></thead>
+        <tbody>
+          <tr v-for="user in visibleUsers" :key="user.id">
+          <td class="mono">{{ user.id }}</td>
           <td>{{ user.primer_nombre }} {{ user.primer_apellido }}</td>
           <td>{{ user.correo }}</td>
           <td>{{ user.rol }}</td>
@@ -178,7 +242,11 @@ onMounted(load)
           <td>
             <button v-if="auth.can('USUARIOS.GESTIONAR')" class="link" type="button" @click="edit(user)"><Pencil :size="14" /> Editar</button>
           </td>
-        </tr></tbody>
+        </tr>
+        <tr v-if="visibleUsers.length === 0">
+          <td colspan="7">No hay usuarios que coincidan con el filtro.</td>
+        </tr>
+        </tbody>
       </table></div>
     </section>
   </section>

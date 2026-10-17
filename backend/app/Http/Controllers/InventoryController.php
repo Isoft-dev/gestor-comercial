@@ -27,16 +27,20 @@ class InventoryController extends ApiController
             );
 
         if ($request->filled('buscar')) {
-            $search = $request->query('buscar');
+            $search = trim((string) $request->query('buscar'));
             $query->where(fn ($q) => $q
                 ->where('p.PRO_SKU', 'like', "%{$search}%")
-                ->orWhere('p.PRO_Nombre', 'like', "%{$search}%"));
+                ->orWhere('p.PRO_Nombre', 'like', "%{$search}%")
+                ->when(ctype_digit($search), fn ($q) => $q->orWhere('p.PRO_Producto', (int) $search)));
         }
         if ($request->filled('categoria_id')) {
             $query->where('p.CAT_Categoria', $request->integer('categoria_id'));
         }
+        if ($request->query('stock') === 'bajo') {
+            $query->whereColumn('i.INV_Existencia', '<=', 'p.PRO_Existencia_Minima');
+        }
 
-        $stock = $query->orderBy('p.PRO_Nombre')->paginate(20);
+        $stock = $this->orderedStock($query, $request)->paginate(min((int) $request->query('por_pagina', 50), 100));
         if (! $request->boolean('completo')) {
             return response()->json($stock);
         }
@@ -60,6 +64,27 @@ class InventoryController extends ApiController
         $this->requireAnyPermission($request, ['INVENTARIO.AJUSTAR', 'COMPRAS.REGISTRAR', 'REPORTES.CONSULTAR']);
 
         return response()->json($this->activeAlerts());
+    }
+
+    private function orderedStock($query, Request $request)
+    {
+        $sorts = [
+            'id' => 'p.PRO_Producto',
+            'sku' => 'p.PRO_SKU',
+            'nombre' => 'p.PRO_Nombre',
+            'categoria' => 'c.CAT_Nombre',
+            'existencia' => 'i.INV_Existencia',
+            'minimo' => 'p.PRO_Existencia_Minima',
+        ];
+        $orden = (string) $request->query('orden', 'id');
+        $column = $sorts[$orden] ?? $sorts['id'];
+        $direction = $request->query('direccion') === 'desc' ? 'desc' : 'asc';
+        $query->orderBy($column, $direction);
+        if ($orden !== 'id') {
+            $query->orderBy('p.PRO_Producto');
+        }
+
+        return $query;
     }
 
     private function movementQuery(Request $request)
@@ -100,7 +125,7 @@ class InventoryController extends ApiController
             ->join('TEC_INVENTARIO as i', 'i.PRO_Producto', '=', 'p.PRO_Producto')
             ->where('a.ALE_Estado', 'ACTIVA')
             ->select('a.*', 'p.PRO_SKU', 'p.PRO_Nombre', 'i.INV_Existencia', 'p.PRO_Existencia_Minima')
-            ->orderBy('p.PRO_Nombre')
+            ->orderBy('p.PRO_Producto')
             ->get();
     }
 

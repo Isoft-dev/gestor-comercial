@@ -6,6 +6,7 @@ import { permisoEnEntrega } from '../config/entrega'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { CircleAlert, CircleCheck, KeyRound, Pencil, Save, Shield, X } from '@lucide/vue'
+import SortHeader from '../components/SortHeader.vue'
 
 const router = useRouter()
 
@@ -16,6 +17,10 @@ const permissions = ref([])
 const error = ref('')
 const message = ref('')
 const editingId = ref(null)
+const search = ref('')
+const statusFilter = ref('todos')
+const sort = ref('id')
+const direction = ref('asc')
 const form = reactive({
   nombre: '',
   permisos: [],
@@ -30,6 +35,38 @@ const groupedPermissions = computed(() => {
       return groups
     }, {})
 })
+
+const visibleRoles = computed(() => {
+  const term = search.value.trim().toLowerCase()
+  const rows = roles.value.filter((role) => {
+    if (statusFilter.value === 'activos' && !role.ROL_Estado) return false
+    if (statusFilter.value === 'inactivos' && role.ROL_Estado) return false
+    if (!term) return true
+    return String(role.ROL_Rol).includes(term) || role.ROL_Nombre.toLowerCase().includes(term)
+  })
+  const factor = direction.value === 'asc' ? 1 : -1
+  const value = (role) => {
+    if (sort.value === 'nombre') return role.ROL_Nombre.toLowerCase()
+    if (sort.value === 'permisos') return role.permisos.length
+    if (sort.value === 'estado') return role.ROL_Estado ? 1 : 0
+    return Number(role.ROL_Rol)
+  }
+  return [...rows].sort((left, right) => {
+    const a = value(left)
+    const b = value(right)
+    if (a < b) return -1 * factor
+    if (a > b) return 1 * factor
+    return left.ROL_Rol - right.ROL_Rol
+  })
+})
+
+function toggleSort(column) {
+  if (sort.value === column) direction.value = direction.value === 'asc' ? 'desc' : 'asc'
+  else {
+    sort.value = column
+    direction.value = 'asc'
+  }
+}
 
 function reset() {
   editingId.value = null
@@ -189,18 +226,32 @@ onMounted(load)
     </form>
     <section class="panel">
       <div class="panel-heading"><Shield :size="18" /><h2>Roles del sistema</h2></div>
+      <form class="filter-bar" @submit.prevent>
+        <label>Buscar
+          <input v-model="search" type="search" placeholder="ID o nombre del rol" />
+        </label>
+        <label>Estado
+          <select v-model="statusFilter">
+            <option value="todos">Todos</option>
+            <option value="activos">Activos</option>
+            <option value="inactivos">Inactivos</option>
+          </select>
+        </label>
+      </form>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Rol</th>
-              <th>Permisos</th>
-              <th>Estado</th>
+              <SortHeader label="ID" column="id" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Rol" column="nombre" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Permisos" column="permisos" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Estado" column="estado" :sort="sort" :direction="direction" @sort="toggleSort" />
               <th>Acción</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="role in roles" :key="role.ROL_Rol">
+            <tr v-for="role in visibleRoles" :key="role.ROL_Rol">
+              <td class="mono">{{ role.ROL_Rol }}</td>
               <td>{{ role.ROL_Nombre }}</td>
               <td>{{ role.permisos.length }} asignados</td>
               <td>

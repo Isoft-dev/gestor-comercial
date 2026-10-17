@@ -17,7 +17,7 @@ class RoleController extends ApiController
     {
         $this->requireView($request, 'USUARIOS');
 
-        $query = DB::table('TEC_ROL')->orderBy('ROL_Nombre');
+        $query = DB::table('TEC_ROL')->orderBy('ROL_Rol');
         if ($request->boolean('solo_activos')) {
             $query->where('ROL_Estado', true);
         }

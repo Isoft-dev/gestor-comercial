@@ -6,12 +6,19 @@ import { formatCurrency } from '../lib/currency'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { Ban, CircleAlert, CircleCheck, Package, Pencil, Save, Search, X } from '@lucide/vue'
+import SortHeader from '../components/SortHeader.vue'
 
 const auth = useAuthStore()
 const items = ref([])
 const categories = ref([])
 const brands = ref([])
 const search = ref('')
+const categoryId = ref('')
+const brandId = ref('')
+const statusFilter = ref('todos')
+const stockFilter = ref('todos')
+const sort = ref('id')
+const direction = ref('asc')
 const message = ref('')
 const error = ref('')
 const editingId = ref(null)
@@ -94,7 +101,16 @@ function selectPhoto(event) {
 async function load() {
   error.value = ''
   try {
-    const params = { buscar: search.value, por_pagina: 50 }
+    const params = {
+      buscar: search.value,
+      por_pagina: 100,
+      orden: sort.value,
+      direccion: direction.value,
+      estado: statusFilter.value,
+      stock: stockFilter.value,
+    }
+    if (categoryId.value) params.categoria_id = categoryId.value
+    if (brandId.value) params.marca_id = brandId.value
     if (!categories.value.length || !brands.value.length) params.con_opciones = 1
     const { data } = await api.get('/catalogos/productos', { params })
     items.value = data.data
@@ -187,6 +203,16 @@ async function changeState(item, active) {
 }
 
 onMounted(load)
+
+function toggleSort(column) {
+  if (sort.value === column) {
+    direction.value = direction.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sort.value = column
+    direction.value = 'asc'
+  }
+  load()
+}
 </script>
 
 <template>
@@ -199,6 +225,31 @@ onMounted(load)
   <form class="filter-bar" @submit.prevent="load">
     <label>Buscar
       <input v-model="search" type="search" placeholder="ID, SKU o nombre" />
+    </label>
+    <label>Categoría
+      <select v-model="categoryId" @change="load">
+        <option value="">Todas</option>
+        <option v-for="item in categories" :key="item.CAT_Categoria" :value="item.CAT_Categoria">{{ item.CAT_Nombre }}</option>
+      </select>
+    </label>
+    <label>Marca
+      <select v-model="brandId" @change="load">
+        <option value="">Todas</option>
+        <option v-for="item in brands" :key="item.MAR_Marca" :value="item.MAR_Marca">{{ item.MAR_Nombre }}</option>
+      </select>
+    </label>
+    <label>Estado
+      <select v-model="statusFilter" @change="load">
+        <option value="todos">Todos</option>
+        <option value="activos">Activos</option>
+        <option value="inactivos">Inactivos</option>
+      </select>
+    </label>
+    <label>Stock
+      <select v-model="stockFilter" @change="load">
+        <option value="todos">Todo</option>
+        <option value="bajo">Bajo mínimo</option>
+      </select>
     </label>
     <button class="button primary" type="submit"><Search :size="16" /> Consultar</button>
   </form>
@@ -250,14 +301,14 @@ onMounted(load)
         <table>
           <thead>
             <tr>
-              <th>ID</th>
+              <SortHeader label="ID" column="id" :sort="sort" :direction="direction" @sort="toggleSort" />
               <th>Foto</th>
-              <th>SKU</th>
-              <th>Nombre</th>
-              <th>Clasificación</th>
-              <th>Precio</th>
-              <th>Stock</th>
-              <th>Estado</th>
+              <SortHeader label="SKU" column="sku" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Nombre" column="nombre" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Clasificación" column="clasificacion" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Precio" column="precio" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Stock" column="stock" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="Estado" column="estado" :sort="sort" :direction="direction" @sort="toggleSort" />
               <th>Acción</th>
             </tr>
           </thead>
@@ -283,6 +334,9 @@ onMounted(load)
                   <CircleCheck :size="14" /> Activar
                 </button>
               </td>
+            </tr>
+            <tr v-if="items.length === 0">
+              <td colspan="9">No hay productos que coincidan con el filtro.</td>
             </tr>
           </tbody>
         </table>

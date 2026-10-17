@@ -30,7 +30,7 @@ class PurchaseController extends ApiController
             $query->where('c.COM_Fecha', '<=', $request->query('hasta').' 23:59:59');
         }
 
-        $purchases = $query->orderByDesc('c.COM_Fecha')->paginate(20);
+        $purchases = $this->orderedPurchases($query, $request)->paginate(20);
         $ids = collect($purchases->items())->pluck('COM_Compra');
         $details = $ids->isEmpty()
             ? collect()
@@ -281,5 +281,25 @@ class PurchaseController extends ApiController
             ]);
 
         return response()->json($receipt);
+    }
+
+    private function orderedPurchases($query, Request $request)
+    {
+        $sorts = [
+            'id' => 'c.COM_Compra',
+            'proveedor' => 'p.PRV_Razon_Social',
+            'total' => 'c.COM_Total',
+            'estado' => 'e.ESC_Codigo',
+            'fecha' => 'c.COM_Fecha',
+        ];
+        $orden = (string) $request->query('orden', 'id');
+        $column = $sorts[$orden] ?? $sorts['id'];
+        $direction = $request->query('direccion') === 'desc' ? 'desc' : 'asc';
+        $query->orderBy($column, $direction);
+        if ($orden !== 'id') {
+            $query->orderBy('c.COM_Compra');
+        }
+
+        return $query;
     }
 }

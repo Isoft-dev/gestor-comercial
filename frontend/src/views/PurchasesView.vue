@@ -4,6 +4,7 @@ import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
 import { CircleAlert, CircleCheck, Eye, PackageCheck, Plus, Search, Truck, X } from '@lucide/vue'
+import SortHeader from '../components/SortHeader.vue'
 
 const purchases = ref([])
 const receipts = ref([])
@@ -11,6 +12,9 @@ const providers = ref([])
 const products = ref([])
 const error = ref('')
 const message = ref('')
+const purchaseStatus = ref('')
+const sort = ref('id')
+const direction = ref('asc')
 const receiptSearch = ref('')
 const receiptFrom = ref('')
 const receiptTo = ref('')
@@ -21,7 +25,14 @@ const form = reactive({ proveedor_id: '', producto_id: '', cantidad: 1, costo_un
 
 async function load() {
   try {
-    const { data } = await api.get('/compras', { params: { con_opciones: 1 } })
+    const { data } = await api.get('/compras', {
+      params: {
+        con_opciones: 1,
+        estado: purchaseStatus.value || undefined,
+        orden: sort.value,
+        direccion: direction.value,
+      },
+    })
     purchases.value = data.data
     if (data.proveedores) providers.value = data.proveedores
     if (data.productos) products.value = data.productos
@@ -107,6 +118,15 @@ async function receive(id) {
 }
 
 onMounted(load)
+
+function toggleSort(column) {
+  if (sort.value === column) direction.value = direction.value === 'asc' ? 'desc' : 'asc'
+  else {
+    sort.value = column
+    direction.value = 'asc'
+  }
+  load()
+}
 </script>
 
 <template>
@@ -129,8 +149,25 @@ onMounted(load)
     </form>
     <section class="panel">
       <div class="panel-heading"><PackageCheck :size="18" /><h2>Órdenes recientes</h2></div>
+      <form class="filter-bar" @submit.prevent="load">
+        <label>Estado
+          <select v-model="purchaseStatus" @change="load">
+            <option value="">Todos</option>
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="RECIBIDA">Recibida</option>
+            <option value="CANCELADA">Cancelada</option>
+          </select>
+        </label>
+        <button class="button primary" type="submit"><Search :size="16" /> Consultar</button>
+      </form>
       <div class="table-wrap"><table>
-        <thead><tr><th>#</th><th>Proveedor</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr>
+          <SortHeader label="ID" column="id" :sort="sort" :direction="direction" @sort="toggleSort" />
+          <SortHeader label="Proveedor" column="proveedor" :sort="sort" :direction="direction" @sort="toggleSort" />
+          <SortHeader label="Total" column="total" :sort="sort" :direction="direction" @sort="toggleSort" />
+          <SortHeader label="Estado" column="estado" :sort="sort" :direction="direction" @sort="toggleSort" />
+          <th></th>
+        </tr></thead>
         <tbody>
           <template v-for="purchase in purchases" :key="purchase.COM_Compra">
             <tr>

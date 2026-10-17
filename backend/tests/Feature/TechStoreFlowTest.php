@@ -540,6 +540,50 @@ class TechStoreFlowTest extends TestCase
         $this->assertDatabaseMissing('TEC_PRODUCTO', ['PRO_SKU' => 'TEC-PHOTO-LARGE']);
     }
 
+    public function test_product_catalog_defaults_to_id_order_and_filters_by_category(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $categories = DB::table('TEC_CATEGORIA')->orderBy('CAT_Categoria')->pluck('CAT_Categoria');
+        $brand = DB::table('TEC_MARCA')->value('MAR_Marca');
+
+        $first = $this->postJson('/api/catalogos/productos', [
+            'categoria_id' => $categories[0],
+            'marca_id' => $brand,
+            'sku' => 'TEC-ORD-Z',
+            'nombre' => 'Zeta orden',
+            'costo' => 10,
+            'precio' => 20,
+            'existencia_minima' => 1,
+        ])->assertCreated()->json('id');
+
+        $second = $this->postJson('/api/catalogos/productos', [
+            'categoria_id' => $categories[1],
+            'marca_id' => $brand,
+            'sku' => 'TEC-ORD-A',
+            'nombre' => 'Alfa orden',
+            'costo' => 10,
+            'precio' => 20,
+            'existencia_minima' => 1,
+        ])->assertCreated()->json('id');
+
+        $ids = collect($this->getJson('/api/catalogos/productos?por_pagina=100')->assertOk()->json('data'))
+            ->pluck('PRO_Producto')
+            ->all();
+        $this->assertLessThan(array_search($second, $ids, true), array_search($first, $ids, true));
+
+        $names = collect($this->getJson('/api/catalogos/productos?orden=nombre&direccion=desc&por_pagina=100')->assertOk()->json('data'))
+            ->pluck('PRO_Nombre')
+            ->all();
+        $this->assertLessThan(array_search('Alfa orden', $names, true), array_search('Zeta orden', $names, true));
+
+        $filtered = collect($this->getJson('/api/catalogos/productos?categoria_id='.$categories[1].'&por_pagina=100')->assertOk()->json('data'))
+            ->pluck('PRO_Producto')
+            ->all();
+        $this->assertContains($second, $filtered);
+        $this->assertNotContains($first, $filtered);
+    }
+
     public function test_product_photo_can_be_removed_when_editing(): void
     {
         Storage::fake('public');

@@ -25,6 +25,51 @@ class CatalogController extends ApiController
         'productos' => ['table' => 'TEC_PRODUCTO', 'key' => 'PRO_Producto', 'name' => 'PRO_Nombre'],
     ];
 
+    private const SORTS = [
+        'clientes' => [
+            'id' => 'CLI_Cliente',
+            'identificacion' => 'CLI_Identificacion',
+            'nombre' => 'CLI_Primer_Nombre',
+            'estado' => 'CLI_Estado',
+        ],
+        'proveedores' => [
+            'id' => 'PRV_Proveedor',
+            'identificacion' => 'PRV_Identificacion_Fiscal',
+            'razon_social' => 'PRV_Razon_Social',
+            'contacto' => 'PRV_Contacto',
+            'correo' => 'PRV_Correo',
+            'telefono' => 'PRV_Telefono',
+            'estado' => 'PRV_Estado',
+        ],
+        'categorias' => [
+            'id' => 'CAT_Categoria',
+            'nombre' => 'CAT_Nombre',
+            'estado' => 'CAT_Estado',
+        ],
+        'marcas' => [
+            'id' => 'MAR_Marca',
+            'nombre' => 'MAR_Nombre',
+            'estado' => 'MAR_Estado',
+        ],
+        'productos' => [
+            'id' => 'TEC_PRODUCTO.PRO_Producto',
+            'sku' => 'TEC_PRODUCTO.PRO_SKU',
+            'nombre' => 'TEC_PRODUCTO.PRO_Nombre',
+            'clasificacion' => 'TEC_CATEGORIA.CAT_Nombre',
+            'precio' => 'TEC_PRODUCTO.PRO_Precio',
+            'stock' => 'TEC_INVENTARIO.INV_Existencia',
+            'estado' => 'TEC_PRODUCTO.PRO_Estado',
+        ],
+    ];
+
+    private const STATE_COLUMNS = [
+        'clientes' => 'CLI_Estado',
+        'proveedores' => 'PRV_Estado',
+        'categorias' => 'CAT_Estado',
+        'marcas' => 'MAR_Estado',
+        'productos' => 'TEC_PRODUCTO.PRO_Estado',
+    ];
+
     public function index(Request $request, string $type): JsonResponse
     {
         $this->requireView($request, $type === 'clientes' ? 'CLIENTES' : 'CATALOGOS');
@@ -40,6 +85,9 @@ class CatalogController extends ApiController
                         ->orWhere('PRV_Contacto', 'like', "%{$search}%")
                         ->orWhere('PRV_Correo', 'like', "%{$search}%")
                         ->orWhere('PRV_Telefono', 'like', "%{$search}%");
+                    if (ctype_digit($search)) {
+                        $builder->orWhere('PRV_Proveedor', (int) $search);
+                    }
                 });
             } elseif ($type === 'clientes') {
                 $query->where(function ($builder) use ($search) {
@@ -47,27 +95,52 @@ class CatalogController extends ApiController
                         ->orWhere('CLI_Primer_Nombre', 'like', "%{$search}%")
                         ->orWhere('CLI_Segundo_Nombre', 'like', "%{$search}%")
                         ->orWhere('CLI_Primer_Apellido', 'like', "%{$search}%")
-                        ->orWhere('CLI_Segundo_Apellido', 'like', "%{$search}%");
+                        ->orWhere('CLI_Segundo_Apellido', 'like', "%{$search}%")
+                        ->orWhere('CLI_Correo', 'like', "%{$search}%")
+                        ->orWhere('CLI_Telefono', 'like', "%{$search}%");
+                    if (ctype_digit($search)) {
+                        $builder->orWhere('CLI_Cliente', (int) $search);
+                    }
                 });
             } elseif ($type === 'productos') {
                 $query->where(function ($builder) use ($search) {
                     $builder->where('TEC_PRODUCTO.PRO_Nombre', 'like', "%{$search}%")
-                        ->orWhere('TEC_PRODUCTO.PRO_SKU', 'like', "%{$search}%");
+                        ->orWhere('TEC_PRODUCTO.PRO_SKU', 'like', "%{$search}%")
+                        ->orWhere('TEC_PRODUCTO.PRO_Descripcion', 'like', "%{$search}%");
                     if (ctype_digit($search)) {
                         $builder->orWhere('TEC_PRODUCTO.PRO_Producto', (int) $search);
                     }
                 });
             } else {
-                $query->where($config['name'], 'like', "%{$search}%");
+                $query->where(function ($builder) use ($config, $search) {
+                    $builder->where($config['name'], 'like', "%{$search}%");
+                    if (ctype_digit($search)) {
+                        $builder->orWhere($config['key'], (int) $search);
+                    }
+                });
             }
         }
 
-        if ($type === 'proveedores') {
-            $request->validate(['estado' => ['sometimes', 'in:todos,activos,inactivos']]);
+        if ($request->filled('estado')) {
+            $request->validate(['estado' => ['in:todos,activos,inactivos']]);
             if ($request->query('estado') === 'activos') {
-                $query->where('PRV_Estado', true);
+                $query->where(self::STATE_COLUMNS[$type], true);
             } elseif ($request->query('estado') === 'inactivos') {
-                $query->where('PRV_Estado', false);
+                $query->where(self::STATE_COLUMNS[$type], false);
+            }
+        }
+
+        if ($type === 'productos') {
+            $request->validate([
+                'categoria_id' => ['sometimes', 'nullable', 'integer'],
+                'marca_id' => ['sometimes', 'nullable', 'integer'],
+                'stock' => ['sometimes', 'in:todos,bajo'],
+            ]);
+            if ($request->filled('categoria_id')) {
+                $query->where('TEC_PRODUCTO.CAT_Categoria', $request->integer('categoria_id'));
+            }
+            if ($request->filled('marca_id')) {
+                $query->where('TEC_PRODUCTO.MAR_Marca', $request->integer('marca_id'));
             }
         }
 
@@ -92,9 +165,12 @@ class CatalogController extends ApiController
                     'TEC_MARCA.MAR_Nombre',
                     'TEC_INVENTARIO.INV_Existencia',
                 );
+            if ($request->query('stock') === 'bajo') {
+                $query->whereColumn('TEC_INVENTARIO.INV_Existencia', '<=', 'TEC_PRODUCTO.PRO_Existencia_Minima');
+            }
         }
 
-        $page = $query->orderBy($config['name'])->paginate(min((int) $request->query('por_pagina', 20), 100));
+        $page = $this->orderedCatalog($query, $type)->paginate(min((int) $request->query('por_pagina', 20), 100));
         if ($type === 'productos') {
             $storageBaseUrl = rtrim($request->getSchemeAndHttpHost(), '/').'/storage/';
             $page->getCollection()->transform(function ($product) use ($storageBaseUrl) {
@@ -126,6 +202,28 @@ class CatalogController extends ApiController
         }
 
         return response()->json($payload);
+    }
+
+    private function orderedCatalog($query, string $type)
+    {
+        $sorts = self::SORTS[$type];
+        $orden = (string) request()->query('orden', 'id');
+        $column = $sorts[$orden] ?? $sorts['id'];
+        $direction = request()->query('direccion') === 'desc' ? 'desc' : 'asc';
+
+        if ($type === 'productos' && $orden === 'clasificacion') {
+            return $query
+                ->orderBy('TEC_CATEGORIA.CAT_Nombre', $direction)
+                ->orderBy('TEC_MARCA.MAR_Nombre', $direction)
+                ->orderBy('TEC_PRODUCTO.PRO_Producto');
+        }
+
+        $ordered = $query->orderBy($column, $direction);
+        if ($orden !== 'id') {
+            $ordered->orderBy($sorts['id']);
+        }
+
+        return $ordered;
     }
 
     public function store(Request $request, string $type): JsonResponse
@@ -264,7 +362,7 @@ class CatalogController extends ApiController
                 'u.USU_Bloqueado_Hasta as bloqueado_hasta',
                 'r.ROL_Nombre as rol',
             )
-            ->orderBy('u.USU_Primer_Nombre')
+            ->orderBy('u.USU_Usuario')
             ->get();
 
         if (! $request->boolean('con_roles')) {
