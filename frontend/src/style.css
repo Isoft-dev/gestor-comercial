@@ -520,6 +520,31 @@ tr.detail-row td { padding-top: 0; background: #f8fafc; color: var(--muted); }
 
 .compact-form { grid-template-columns: repeat(5, minmax(120px, 1fr)); align-items: end; margin-bottom: 20px; }
 .compact-form h2, .compact-form .panel-heading { grid-column: 1 / -1; }
+.product-picker { position: relative; grid-column: 1 / -1; min-width: 0; }
+.product-options {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.product-option {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.product-option:hover, .product-option[aria-selected="true"] { background: var(--accent-soft); }
+.product-option-empty { padding: 10px 12px; color: var(--muted); font-size: .86rem; }
 .filter-bar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 20px; }
 .filter-bar label { min-width: 145px; }
 code { white-space: pre-wrap; font-size: .72rem; color: #3d4654; font-family: var(--mono); }
