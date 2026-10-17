@@ -13,6 +13,9 @@ class InventoryController extends ApiController
     public function stock(Request $request): JsonResponse
     {
         $this->requireAnyPermission($request, ['INVENTARIO.AJUSTAR', 'COMPRAS.REGISTRAR', 'PEDIDOS.REGISTRAR', 'VENTAS.REGISTRAR', 'REPORTES.CONSULTAR']);
+        $request->validate([
+            'por_pagina' => ['sometimes', 'integer', 'min:1', 'max:100'],
+        ]);
         $query = DB::table('TEC_INVENTARIO as i')
             ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'i.PRO_Producto')
             ->join('TEC_CATEGORIA as c', 'c.CAT_Categoria', '=', 'p.CAT_Categoria')
@@ -40,13 +43,16 @@ class InventoryController extends ApiController
             $query->whereColumn('i.INV_Existencia', '<=', 'p.PRO_Existencia_Minima');
         }
 
-        $stock = $this->orderedStock($query, $request)->paginate(min((int) $request->query('por_pagina', 50), 100));
+        $stock = $this->orderedStock($query, $request)->paginate(min($request->integer('por_pagina', 20), 100));
         if (! $request->boolean('completo')) {
             return response()->json($stock);
         }
 
         return response()->json([
             'stock' => $stock,
+            'categorias' => DB::table('TEC_CATEGORIA')
+                ->orderBy('CAT_Nombre')
+                ->get(['CAT_Categoria', 'CAT_Nombre']),
             'movimientos' => $this->movementQuery($request)->orderByDesc('m.MOV_Fecha')->paginate(30),
             'alertas' => $this->activeAlerts(),
         ]);
