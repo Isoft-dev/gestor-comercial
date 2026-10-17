@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { releasePageRequest, trackPageRequest } from '../lib/pageLoading'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
@@ -8,12 +9,16 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('techstore_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
-  return config
+  return trackPageRequest(config)
 })
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    releasePageRequest(response.config)
+    return response
+  },
   (error) => {
+    releasePageRequest(error.config)
     const status = error.response?.status
     const path = window.location.pathname
     if (status === 401) {

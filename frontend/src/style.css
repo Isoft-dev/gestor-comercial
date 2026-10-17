@@ -139,7 +139,35 @@ p { margin: 0; }
 .profile small { color: #9aa6b8; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; }
 .profile .button { margin-top: 10px; width: 100%; }
 
-.content { min-width: 0; padding: 32px 56px 48px 36px; }
+.content { position: relative; min-width: 0; padding: 32px 56px 48px 36px; }
+.page-loading {
+  position: fixed;
+  z-index: 8;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(231, 235, 241, .88);
+  color: var(--muted);
+}
+.app-shell.collapsed .page-loading { left: 84px; }
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; border-top-color: var(--accent); }
+}
 
 .page-header {
   display: flex;
@@ -610,6 +638,7 @@ code { white-space: pre-wrap; font-size: .72rem; color: #3d4654; font-family: va
 }
 
 @media (max-width: 767px) {
+  .page-loading { top: 61px; left: 0; }
   .app-shell { grid-template-columns: 1fr; }
   .topbar {
     display: flex;

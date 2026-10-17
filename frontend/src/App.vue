@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppDialog from './components/AppDialog.vue'
 import { esEntregaCierre, moduloEnEntrega } from './config/entrega'
+import { pageLoading } from './lib/pageLoading'
 import { useAuthStore } from './stores/auth'
 import {
   Award,
@@ -127,8 +128,17 @@ async function signOut() {
     <main class="content">
       <Suspense>
         <RouterView />
-        <template #fallback><p class="muted">Cargando…</p></template>
+        <template #fallback>
+          <div class="page-loading" role="status">
+            <span class="spinner" aria-hidden="true"></span>
+            <p>Cargando…</p>
+          </div>
+        </template>
       </Suspense>
+      <div v-if="pageLoading" class="page-loading" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <p>Cargando datos…</p>
+      </div>
     </main>
   </div>
   <Suspense v-else>

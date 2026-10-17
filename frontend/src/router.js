@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { esEntregaCierre, moduloEnEntrega } from './config/entrega'
+import { settlePageLoading, startPageLoading, stopPageLoading } from './lib/pageLoading'
 import { useAuthStore } from './stores/auth'
 import HomeView from './views/HomeView.vue'
 import LoginView from './views/LoginView.vue'
@@ -39,8 +40,9 @@ function allowed(auth, permission) {
   return Array.isArray(permission) ? permission.some((item) => auth.can(item)) : auth.can(permission)
 }
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
   const auth = useAuthStore()
+  if (to.fullPath !== from.fullPath && !to.meta.public) startPageLoading()
   if (!moduloEnEntrega(to.path)) return auth.isAuthenticated ? auth.homePath() : '/login'
   if (!to.meta.public && !auth.isAuthenticated) return '/login'
   if (to.path === '/login' && auth.isAuthenticated) return auth.homePath()
@@ -54,6 +56,11 @@ router.beforeEach(async (to) => {
   }
   if (!allowed(auth, to.meta.permission)) return '/acceso-denegado'
   return true
+})
+
+router.afterEach((to) => {
+  if (to.meta.public) stopPageLoading()
+  else settlePageLoading()
 })
 
 export default router
