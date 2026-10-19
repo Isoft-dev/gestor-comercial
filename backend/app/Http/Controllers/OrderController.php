@@ -32,6 +32,18 @@ class OrderController extends ApiController
         if ($request->filled('cliente_id')) {
             $query->where('p.CLI_Cliente', $request->integer('cliente_id'));
         }
+        if ($request->filled('buscar')) {
+            $search = trim((string) $request->query('buscar'));
+            $query->where(function ($inner) use ($search) {
+                $inner->where('c.CLI_Identificacion', 'like', "%{$search}%")
+                    ->orWhere('c.CLI_Primer_Nombre', 'like', "%{$search}%")
+                    ->orWhere('c.CLI_Primer_Apellido', 'like', "%{$search}%")
+                    ->orWhere('c.CLI_Segundo_Apellido', 'like', "%{$search}%");
+                if (ctype_digit($search)) {
+                    $inner->orWhere('p.PED_Pedido', (int) $search);
+                }
+            });
+        }
 
         $orders = $query->orderByDesc('p.PED_Fecha')->paginate(20);
         $ids = collect($orders->items())->pluck('PED_Pedido');
@@ -45,6 +57,14 @@ class OrderController extends ApiController
                 ->get()
                 ->groupBy('PED_Pedido');
         $this->attachGrouped($orders, 'PED_Pedido', 'detalles', $details);
+        $history = $ids->isEmpty()
+            ? collect()
+            : DB::table('TEC_HISTORIAL_ESTADO')
+                ->whereIn('PED_Pedido', $ids)
+                ->orderBy('HES_Fecha')
+                ->get()
+                ->groupBy('PED_Pedido');
+        $this->attachGrouped($orders, 'PED_Pedido', 'historial', $history);
 
         if (! $request->boolean('con_opciones')) {
             return response()->json($orders);

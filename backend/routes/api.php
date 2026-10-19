@@ -42,6 +42,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/compras', [PurchaseController::class, 'index']);
     Route::post('/compras', [PurchaseController::class, 'store']);
     Route::post('/compras/{id}/recibir', [PurchaseController::class, 'receive']);
+    Route::get('/incidencias', [PurchaseController::class, 'incidents']);
+    Route::post('/incidencias/{id}/resolver', [PurchaseController::class, 'resolveIncident']);
     Route::get('/recepciones', [PurchaseController::class, 'receipts']);
     Route::get('/recepciones/{id}', [PurchaseController::class, 'receipt']);
 

@@ -19,7 +19,7 @@ class Entrega
         'VENTAS.REGISTRAR' => 3,
         'PAGOS.REGISTRAR' => 3,
         'AUDITORIA.CONSULTAR' => 3,
-        'REPORTES.CONSULTAR' => 4,
+        'REPORTES.CONSULTAR' => 3,
     ];
 
     public static function actual(): int

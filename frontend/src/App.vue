@@ -32,24 +32,30 @@ const route = useRoute()
 const menuOpen = ref(false)
 const collapsed = ref(window.innerWidth <= 1179 && window.innerWidth > 767)
 
-const links = computed(() => [
-  esEntregaCierre
-    ? { to: '/', label: 'Dashboard', permission: 'REPORTES.CONSULTAR', icon: LayoutDashboard }
-    : { to: '/', label: 'Inicio', icon: House },
-  { to: '/clientes', label: 'Clientes', permission: 'CLIENTES.CONSULTAR', icon: IdCard },
-  { to: '/productos', label: 'Productos', permission: 'CATALOGOS.CONSULTAR', icon: Package },
-  { to: '/categorias', label: 'Categorías', permission: 'CATALOGOS.CONSULTAR', icon: Tags },
-  { to: '/marcas', label: 'Marcas', permission: 'CATALOGOS.CONSULTAR', icon: Award },
-  { to: '/proveedores', label: 'Proveedores', permission: 'CATALOGOS.CONSULTAR', icon: Building2 },
-  { to: '/usuarios', label: 'Usuarios', permission: 'USUARIOS.CONSULTAR', icon: Users },
-  { to: '/roles', label: 'Roles', permission: 'USUARIOS.CONSULTAR', icon: Shield },
-  { to: '/compras', label: 'Compras', permission: 'COMPRAS.REGISTRAR', icon: Truck },
-  { to: '/inventario', label: 'Inventario', permission: ['INVENTARIO.AJUSTAR', 'COMPRAS.REGISTRAR', 'PEDIDOS.REGISTRAR', 'VENTAS.REGISTRAR', 'REPORTES.CONSULTAR'], icon: Warehouse },
-  { to: '/pedidos', label: 'Pedidos', permission: ['PEDIDOS.REGISTRAR', 'PEDIDOS.APROBAR'], icon: ClipboardList },
-  { to: '/ventas', label: 'Ventas', permission: ['VENTAS.REGISTRAR', 'PAGOS.REGISTRAR', 'REPORTES.CONSULTAR'], icon: Wallet },
-  { to: '/reportes', label: 'Reportes', permission: 'REPORTES.CONSULTAR', icon: BarChart3 },
-  { to: '/auditoria', label: 'Bitácora', permission: 'AUDITORIA.CONSULTAR', icon: ShieldCheck },
-].filter((link) => moduloEnEntrega(link.to) && (!link.permission || auth.can(link.permission))))
+const groups = computed(() => {
+  const links = [
+    esEntregaCierre
+      ? { group: 'General', to: '/', label: 'Dashboard', permission: 'REPORTES.CONSULTAR', icon: LayoutDashboard }
+      : { group: 'General', to: '/', label: 'Inicio', icon: House },
+    { group: 'Catálogo', to: '/clientes', label: 'Clientes', permission: 'CLIENTES.CONSULTAR', icon: IdCard },
+    { group: 'Catálogo', to: '/productos', label: 'Productos', permission: 'CATALOGOS.CONSULTAR', icon: Package },
+    { group: 'Catálogo', to: '/categorias', label: 'Categorías', permission: 'CATALOGOS.CONSULTAR', icon: Tags },
+    { group: 'Catálogo', to: '/marcas', label: 'Marcas', permission: 'CATALOGOS.CONSULTAR', icon: Award },
+    { group: 'Catálogo', to: '/proveedores', label: 'Proveedores', permission: 'CATALOGOS.CONSULTAR', icon: Building2 },
+    { group: 'Administración', to: '/usuarios', label: 'Usuarios', permission: 'USUARIOS.CONSULTAR', icon: Users },
+    { group: 'Administración', to: '/roles', label: 'Roles', permission: 'USUARIOS.CONSULTAR', icon: Shield },
+    { group: 'Operación', to: '/compras', label: 'Compras', permission: 'COMPRAS.REGISTRAR', icon: Truck },
+    { group: 'Operación', to: '/inventario', label: 'Inventario', permission: ['INVENTARIO.AJUSTAR', 'COMPRAS.REGISTRAR', 'PEDIDOS.REGISTRAR', 'VENTAS.REGISTRAR', 'REPORTES.CONSULTAR'], icon: Warehouse },
+    { group: 'Operación', to: '/pedidos', label: 'Pedidos', permission: ['PEDIDOS.REGISTRAR', 'PEDIDOS.APROBAR'], icon: ClipboardList },
+    { group: 'Operación', to: '/ventas', label: 'Ventas', permission: ['VENTAS.REGISTRAR', 'PAGOS.REGISTRAR', 'REPORTES.CONSULTAR'], icon: Wallet },
+    { group: 'Información', to: '/reportes', label: 'Reportes', permission: 'REPORTES.CONSULTAR', icon: BarChart3 },
+    { group: 'Información', to: '/auditoria', label: 'Bitácora', permission: 'AUDITORIA.CONSULTAR', icon: ShieldCheck },
+  ].filter((link) => moduloEnEntrega(link.to) && (!link.permission || auth.can(link.permission)))
+
+  return ['General', 'Catálogo', 'Administración', 'Operación', 'Información']
+    .map((name) => ({ name, links: links.filter((link) => link.group === name) }))
+    .filter((group) => group.links.length)
+})
 
 watch(() => route.fullPath, () => {
   menuOpen.value = false
@@ -109,10 +115,13 @@ async function signOut() {
         </button>
       </div>
       <nav>
-        <RouterLink v-for="link in links" :key="link.to" :to="link.to" :title="link.label">
-          <component :is="link.icon" :size="18" :stroke-width="1.9" />
-          <span class="nav-label">{{ link.label }}</span>
-        </RouterLink>
+        <template v-for="group in groups" :key="group.name">
+          <p class="nav-group">{{ group.name }}</p>
+          <RouterLink v-for="link in group.links" :key="link.to" :to="link.to" :title="link.label">
+            <component :is="link.icon" :size="18" :stroke-width="1.9" />
+            <span class="nav-label">{{ link.label }}</span>
+          </RouterLink>
+        </template>
       </nav>
       <div class="profile">
         <div class="profile-copy">

@@ -16,6 +16,7 @@
 <body>
     <h1>TechStore — {{ $titulo }}</h1>
     <p>Período: {{ $desde }} al {{ $hasta }}</p>
+    <p>{{ $criterios }}</p>
     <p>Generado: {{ $generado_en }}</p>
     @if ($filas->isEmpty())
         <p class="empty">No hay registros para el período seleccionado.</p>

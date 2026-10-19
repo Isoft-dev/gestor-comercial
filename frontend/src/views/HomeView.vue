@@ -3,15 +3,19 @@ import { computed, onMounted, ref } from 'vue'
 import api from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import {
+  BarChart3,
   CircleAlert,
+  ClipboardList,
   House,
   IdCard,
   Package,
   Shield,
+  ShieldCheck,
   Sparkles,
   Tags,
   UserPlus,
   Users,
+  Wallet,
 } from '@lucide/vue'
 
 const auth = useAuthStore()
@@ -47,6 +51,11 @@ const actions = computed(() => [
   { to: '/productos', label: 'Registrar producto', detail: 'SKU, categoría, marca, costo y precio.', icon: Package, show: auth.can('CATALOGOS.GESTIONAR') },
   { to: '/categorias', label: 'Clasificar catálogo', detail: 'Categorías y marcas de los productos.', icon: Tags, show: auth.can('CATALOGOS.GESTIONAR') },
   { to: '/productos', label: 'Ver productos', detail: 'Consultar el catálogo sin modificarlo.', icon: Package, show: auth.can('CATALOGOS.CONSULTAR') && !auth.can('CATALOGOS.GESTIONAR') },
+  { to: '/pedidos', label: 'Registrar pedido', detail: 'Cliente, descuento y avance de estados.', icon: ClipboardList, show: auth.can('PEDIDOS.REGISTRAR') },
+  { to: '/pedidos', label: 'Aprobar descuentos', detail: 'Autorizar pedidos con descuento mayor a 10 %.', icon: ClipboardList, show: auth.can('PEDIDOS.APROBAR') && !auth.can('PEDIDOS.REGISTRAR') },
+  { to: '/ventas', label: 'Ventas y pagos', detail: 'Cobrar el saldo y consultar el detalle.', icon: Wallet, show: auth.can(['VENTAS.REGISTRAR', 'PAGOS.REGISTRAR']) },
+  { to: '/reportes', label: 'Ver reportes', detail: 'Ventas del período e inventario bajo.', icon: BarChart3, show: auth.can('REPORTES.CONSULTAR') },
+  { to: '/auditoria', label: 'Consultar bitácora', detail: 'Quién hizo cada operación y cuándo.', icon: ShieldCheck, show: auth.can('AUDITORIA.CONSULTAR') },
 ].filter((item) => item.show))
 
 async function load() {
@@ -73,7 +82,7 @@ onMounted(load)
 
   <section class="panel home-hero">
     <div class="panel-heading"><Sparkles :size="18" /><h2>Bienvenido a TechStore</h2></div>
-    <p>Desde aquí puede consultar el estado del catálogo y entrar a las funciones de su rol.</p>
+    <p>Desde aquí puede entrar al flujo de pedidos, ventas, pagos y a las funciones de su rol.</p>
   </section>
 
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
@@ -93,7 +102,7 @@ onMounted(load)
   <section v-if="actions.length" class="panel">
     <div class="panel-heading"><House :size="18" /><h2>Accesos rápidos</h2></div>
     <div class="home-actions">
-      <RouterLink v-for="action in actions" :key="action.to" :to="action.to" class="home-action">
+      <RouterLink v-for="action in actions" :key="action.label" :to="action.to" class="home-action">
         <component :is="action.icon" :size="18" :stroke-width="2" />
         <strong>{{ action.label }}</strong>
         <span>{{ action.detail }}</span>

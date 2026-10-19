@@ -1,10 +1,10 @@
-/** Módulos visibles. 1 = catálogo y acceso; 2 = compras; 3 = ventas; 4 = reportes. */
+/** Módulos visibles. 1 = catálogo y acceso; 2 = compras; 3 = pedidos, ventas, auditoría y reportes; 4 = dashboard. */
 export const ENTREGA_ACTUAL = Number(import.meta.env.VITE_ENTREGA_ACTUAL ?? 1)
 
 export const esEntregaCierre = ENTREGA_ACTUAL >= 4
 
 const DESDE_ENTREGA = {
-  '/reportes': 4,
+  '/reportes': 3,
   '/proveedores': 2,
   '/compras': 2,
   '/inventario': 2,
@@ -29,7 +29,7 @@ const PERMISO_DESDE = {
   'VENTAS.REGISTRAR': 3,
   'PAGOS.REGISTRAR': 3,
   'AUDITORIA.CONSULTAR': 3,
-  'REPORTES.CONSULTAR': 4,
+  'REPORTES.CONSULTAR': 3,
 }
 
 export function moduloEnEntrega(path) {

@@ -314,7 +314,12 @@ class TechStoreFlowTest extends TestCase
                 'productos_mas_vendidos',
                 'inventario_bajo',
                 'compras_por_proveedor',
+                'opciones' => ['estados_pago', 'categorias', 'proveedores'],
             ]);
+
+        $this->getJson('/api/reportes?estado_pago=PAGADA&categoria_id=1&proveedor_id=1')
+            ->assertOk()
+            ->assertJsonPath('filtros.estado_pago', 'PAGADA');
     }
 
     public function test_client_can_be_created_updated_and_searched(): void
@@ -754,6 +759,169 @@ class TechStoreFlowTest extends TestCase
         ->assertJsonPath('COM_Compra', $purchaseId)
         ->assertJsonPath('detalles.0.PRO_SKU', $sku)
         ->assertJsonPath('detalles.0.DCO_Cantidad', 4);
+    }
+
+    public function test_damaged_units_stay_out_of_stock_and_open_an_incident(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $product = DB::table('TEC_PRODUCTO')->value('PRO_Producto');
+        $initialStock = (int) DB::table('TEC_INVENTARIO')->where('PRO_Producto', $product)->value('INV_Existencia');
+        $purchaseId = $this->postJson('/api/compras', [
+            'proveedor_id' => DB::table('TEC_PROVEEDOR')->value('PRV_Proveedor'),
+            'detalles' => [[
+                'producto_id' => $product,
+                'cantidad' => 6,
+                'costo_unitario' => 10,
+            ]],
+        ])->assertCreated()->json('id');
+
+        $this->postJson("/api/compras/{$purchaseId}/recibir", [
+            'lineas' => [[
+                'producto_id' => $product,
+                'aceptada' => 4,
+                'danada' => 2,
+                'faltante' => 0,
+                'motivo' => 'Empaque roto',
+            ]],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('TEC_INVENTARIO', [
+            'PRO_Producto' => $product,
+            'INV_Existencia' => $initialStock + 4,
+        ]);
+        $this->assertDatabaseHas('TEC_INCIDENCIA', [
+            'COM_Compra' => $purchaseId,
+            'INC_Cantidad' => 2,
+            'INC_Estado' => 'PENDIENTE',
+        ]);
+        $this->assertDatabaseHas('TEC_COMPRA', [
+            'COM_Compra' => $purchaseId,
+            'ESC_Estado_Compra' => Catalogos::estadoCompra('RECIBIDA'),
+        ]);
+    }
+
+    public function test_missing_units_keep_the_purchase_pending_until_a_later_receipt(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $product = DB::table('TEC_PRODUCTO')->value('PRO_Producto');
+        $initialStock = (int) DB::table('TEC_INVENTARIO')->where('PRO_Producto', $product)->value('INV_Existencia');
+        $purchaseId = $this->postJson('/api/compras', [
+            'proveedor_id' => DB::table('TEC_PROVEEDOR')->value('PRV_Proveedor'),
+            'detalles' => [[
+                'producto_id' => $product,
+                'cantidad' => 5,
+                'costo_unitario' => 8,
+            ]],
+        ])->assertCreated()->json('id');
+
+        $this->postJson("/api/compras/{$purchaseId}/recibir", [
+            'lineas' => [[
+                'producto_id' => $product,
+                'aceptada' => 3,
+                'danada' => 0,
+                'faltante' => 2,
+            ]],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('TEC_INVENTARIO', [
+            'PRO_Producto' => $product,
+            'INV_Existencia' => $initialStock + 3,
+        ]);
+        $this->assertDatabaseHas('TEC_COMPRA', [
+            'COM_Compra' => $purchaseId,
+            'ESC_Estado_Compra' => Catalogos::estadoCompra('PARCIAL'),
+        ]);
+
+        $this->postJson("/api/compras/{$purchaseId}/recibir")->assertOk();
+        $this->assertDatabaseHas('TEC_INVENTARIO', [
+            'PRO_Producto' => $product,
+            'INV_Existencia' => $initialStock + 5,
+        ]);
+        $this->assertDatabaseHas('TEC_COMPRA', [
+            'COM_Compra' => $purchaseId,
+            'ESC_Estado_Compra' => Catalogos::estadoCompra('RECIBIDA'),
+        ]);
+    }
+
+    public function test_indivisible_lot_with_damage_does_not_change_inventory(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $product = DB::table('TEC_PRODUCTO')->value('PRO_Producto');
+        $initialStock = (int) DB::table('TEC_INVENTARIO')->where('PRO_Producto', $product)->value('INV_Existencia');
+        $purchaseId = $this->postJson('/api/compras', [
+            'proveedor_id' => DB::table('TEC_PROVEEDOR')->value('PRV_Proveedor'),
+            'detalles' => [[
+                'producto_id' => $product,
+                'cantidad' => 4,
+                'costo_unitario' => 9,
+            ]],
+        ])->assertCreated()->json('id');
+
+        $this->postJson("/api/compras/{$purchaseId}/recibir", [
+            'lote_indivisible' => true,
+            'lineas' => [[
+                'producto_id' => $product,
+                'aceptada' => 3,
+                'danada' => 1,
+                'faltante' => 0,
+                'motivo' => 'Golpe',
+            ]],
+        ])->assertUnprocessable();
+
+        $this->assertDatabaseHas('TEC_INVENTARIO', [
+            'PRO_Producto' => $product,
+            'INV_Existencia' => $initialStock,
+        ]);
+        $this->assertDatabaseMissing('TEC_RECEPCION', ['COM_Compra' => $purchaseId]);
+        $this->assertDatabaseCount('TEC_INCIDENCIA', 0);
+    }
+
+    public function test_replacing_damaged_units_increases_stock_once(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $product = DB::table('TEC_PRODUCTO')->value('PRO_Producto');
+        $initialStock = (int) DB::table('TEC_INVENTARIO')->where('PRO_Producto', $product)->value('INV_Existencia');
+        $purchaseId = $this->postJson('/api/compras', [
+            'proveedor_id' => DB::table('TEC_PROVEEDOR')->value('PRV_Proveedor'),
+            'detalles' => [[
+                'producto_id' => $product,
+                'cantidad' => 2,
+                'costo_unitario' => 11,
+            ]],
+        ])->assertCreated()->json('id');
+
+        $this->postJson("/api/compras/{$purchaseId}/recibir", [
+            'lineas' => [[
+                'producto_id' => $product,
+                'aceptada' => 0,
+                'danada' => 2,
+                'faltante' => 0,
+                'motivo' => 'No encienden',
+            ]],
+        ])->assertOk();
+
+        $incidentId = DB::table('TEC_INCIDENCIA')->where('COM_Compra', $purchaseId)->value('INC_Incidencia');
+        $this->postJson("/api/incidencias/{$incidentId}/resolver", [
+            'gestion' => 'REEMPLAZO',
+            'resolucion' => 'El proveedor envió unidades nuevas.',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('TEC_INVENTARIO', [
+            'PRO_Producto' => $product,
+            'INV_Existencia' => $initialStock + 2,
+        ]);
+        $this->assertDatabaseHas('TEC_INCIDENCIA', [
+            'INC_Incidencia' => $incidentId,
+            'INC_Estado' => 'REEMPLAZO',
+        ]);
+        $this->postJson("/api/incidencias/{$incidentId}/resolver", [
+            'gestion' => 'DEVOLUCION',
+            'resolucion' => 'Intento duplicado',
+        ])->assertStatus(409);
     }
 
     public function test_password_must_be_strong_and_users_cannot_be_deleted(): void

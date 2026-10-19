@@ -97,8 +97,9 @@ class DatabaseSeeder extends Seeder
     {
         foreach ([
             ['PENDIENTE', 'Pendiente', 1],
-            ['RECIBIDA', 'Recibida', 2],
-            ['CANCELADA', 'Cancelada', 3],
+            ['PARCIAL', 'Recepción parcial', 2],
+            ['RECIBIDA', 'Recibida', 3],
+            ['CANCELADA', 'Cancelada', 4],
         ] as [$codigo, $nombre, $orden]) {
             DB::table('TEC_ESTADO_COMPRA')->insert([
                 'ESC_Codigo' => $codigo,

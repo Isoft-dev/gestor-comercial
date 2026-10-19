@@ -39,6 +39,19 @@ class SaleController extends ApiController
         if ($request->filled('hasta')) {
             $query->where('v.VEN_Fecha', '<=', $request->query('hasta').' 23:59:59');
         }
+        if ($request->filled('buscar')) {
+            $search = trim((string) $request->query('buscar'));
+            $query->where(function ($inner) use ($search) {
+                $inner->where('c.CLI_Identificacion', 'like', "%{$search}%")
+                    ->orWhere('c.CLI_Primer_Nombre', 'like', "%{$search}%")
+                    ->orWhere('c.CLI_Primer_Apellido', 'like', "%{$search}%")
+                    ->orWhere('c.CLI_Segundo_Apellido', 'like', "%{$search}%");
+                if (ctype_digit($search)) {
+                    $inner->orWhere('v.VEN_Venta', (int) $search)
+                        ->orWhere('v.PED_Pedido', (int) $search);
+                }
+            });
+        }
 
         $sales = $query->orderByDesc('v.VEN_Fecha')->paginate(20);
         $ids = collect($sales->items())->pluck('VEN_Venta');
@@ -52,6 +65,16 @@ class SaleController extends ApiController
                 ->get()
                 ->groupBy('VEN_Venta');
         $this->attachGrouped($sales, 'VEN_Venta', 'pagos', $payments);
+        $lines = $ids->isEmpty()
+            ? collect()
+            : DB::table('TEC_DETALLE_VENTA as d')
+                ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'd.PRO_Producto')
+                ->whereIn('d.VEN_Venta', $ids)
+                ->select('d.*', 'p.PRO_SKU', 'p.PRO_Nombre')
+                ->orderBy('p.PRO_Nombre')
+                ->get()
+                ->groupBy('VEN_Venta');
+        $this->attachGrouped($sales, 'VEN_Venta', 'detalles', $lines);
 
         if (! $request->boolean('con_opciones')) {
             return response()->json($sales);

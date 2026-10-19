@@ -21,7 +21,16 @@ const receiptTo = ref('')
 const receiptPage = ref(1)
 const receiptPagination = ref({ current_page: 1, last_page: 1, total: 0 })
 const selectedReceipt = ref(null)
+const inspection = ref(null)
+const incidents = ref([])
+const resolution = reactive({ id: '', gestion: 'DEVOLUCION', resolucion: '', monto_credito: '' })
 const form = reactive({ proveedor_id: '', producto_id: '', cantidad: 1, costo_unitario: 1, observacion: '' })
+const gestiones = [
+  { codigo: 'DEVOLUCION', nombre: 'Devolución al proveedor' },
+  { codigo: 'GARANTIA', nombre: 'Garantía' },
+  { codigo: 'REEMPLAZO', nombre: 'Reemplazo' },
+  { codigo: 'NOTA_CREDITO', nombre: 'Nota de crédito' },
+]
 
 async function load() {
   try {
@@ -37,6 +46,7 @@ async function load() {
     if (data.proveedores) providers.value = data.proveedores
     if (data.productos) products.value = data.productos
     await loadReceipts()
+    await loadIncidents()
   } catch (requestError) {
     error.value = requestError.userMessage
   }
@@ -100,17 +110,108 @@ async function submit() {
   }
 }
 
-async function receive(id) {
-  const accepted = await askConfirm({
-    title: 'Recibir compra',
-    message: '¿Confirmar la recepción? Esta acción dará entrada al inventario.',
-    confirmText: 'Recibir',
+function openReceive(purchase) {
+  error.value = ''
+  message.value = ''
+  inspection.value = {
+    id: purchase.COM_Compra,
+    proveedor: purchase.PRV_Razon_Social,
+    loteIndivisible: false,
+    observacion: '',
+    lineas: (purchase.detalles || [])
+      .filter((detail) => Number(detail.DCO_Pendiente ?? detail.DCO_Cantidad) > 0)
+      .map((detail) => ({
+        producto_id: detail.PRO_Producto,
+        sku: detail.PRO_SKU,
+        nombre: detail.PRO_Nombre,
+        comprada: Number(detail.DCO_Cantidad),
+        pendiente: Number(detail.DCO_Pendiente ?? detail.DCO_Cantidad),
+        aceptada: Number(detail.DCO_Pendiente ?? detail.DCO_Cantidad),
+        danada: 0,
+        faltante: 0,
+        motivo: '',
+        foto: null,
+      })),
+  }
+}
+
+function lineGap(line) {
+  return line.pendiente - (Number(line.aceptada) || 0) - (Number(line.danada) || 0) - (Number(line.faltante) || 0)
+}
+
+function setPhoto(line, event) {
+  line.foto = event.target.files?.[0] || null
+}
+
+async function confirmReceive() {
+  error.value = ''
+  const lines = inspection.value?.lineas || []
+  if (lines.some((line) => lineGap(line) !== 0)) {
+    error.value = 'La suma de unidades buenas, dañadas y faltantes debe ser igual a la cantidad pendiente.'
+    return
+  }
+  if (lines.some((line) => Number(line.danada) > 0 && !line.motivo.trim())) {
+    error.value = 'Indique el motivo de cada producto dañado.'
+    return
+  }
+  const accepted = lines.reduce((sum, line) => sum + Number(line.aceptada || 0), 0)
+  const damaged = lines.reduce((sum, line) => sum + Number(line.danada || 0), 0)
+  const missing = lines.reduce((sum, line) => sum + Number(line.faltante || 0), 0)
+  if (inspection.value.loteIndivisible && (damaged > 0 || missing > 0)) {
+    error.value = 'El lote no se puede dividir. Deje la recepción pendiente o marque todas las unidades como buenas.'
+    return
+  }
+  const confirmed = await askConfirm({
+    title: 'Confirmar recepción',
+    message: `Entrarán ${accepted} unidades al inventario. ${damaged} dañadas quedarán como incidencia. ${missing} faltantes seguirán pendientes.`,
+    confirmText: 'Confirmar recepción',
     tone: 'warning',
   })
-  if (!accepted) return
+  if (!confirmed) return
+  const body = new FormData()
+  body.append('observacion', inspection.value.observacion || '')
+  body.append('lote_indivisible', inspection.value.loteIndivisible ? '1' : '0')
+  body.append('lineas', JSON.stringify(lines.map((line) => ({
+    producto_id: line.producto_id,
+    aceptada: Number(line.aceptada) || 0,
+    danada: Number(line.danada) || 0,
+    faltante: Number(line.faltante) || 0,
+    motivo: line.motivo,
+  }))))
+  lines.forEach((line) => {
+    if (line.foto && Number(line.danada) > 0) body.append(`fotos[${line.producto_id}]`, line.foto)
+  })
   try {
-    await api.post(`/compras/${id}/recibir`)
-    message.value = 'Compra recibida e inventario actualizado.'
+    const { data } = await api.post(`/compras/${inspection.value.id}/recibir`, body)
+    message.value = data.message
+    inspection.value = null
+    await load()
+  } catch (requestError) {
+    error.value = requestError.userMessage
+  }
+}
+
+async function loadIncidents() {
+  try {
+    const { data } = await api.get('/incidencias', { params: { estado: 'PENDIENTE' } })
+    incidents.value = data.data
+  } catch (requestError) {
+    error.value = requestError.userMessage
+  }
+}
+
+async function resolveIncident() {
+  error.value = ''
+  try {
+    const { data } = await api.post(`/incidencias/${resolution.id}/resolver`, {
+      gestion: resolution.gestion,
+      resolucion: resolution.resolucion,
+      monto_credito: resolution.gestion === 'NOTA_CREDITO' ? resolution.monto_credito : undefined,
+    })
+    message.value = data.message
+    resolution.id = ''
+    resolution.resolucion = ''
+    resolution.monto_credito = ''
     await load()
   } catch (requestError) {
     error.value = requestError.userMessage
@@ -154,6 +255,7 @@ function toggleSort(column) {
           <select v-model="purchaseStatus" @change="load">
             <option value="">Todos</option>
             <option value="PENDIENTE">Pendiente</option>
+            <option value="PARCIAL">Recepción parcial</option>
             <option value="RECIBIDA">Recibida</option>
             <option value="CANCELADA">Cancelada</option>
           </select>
@@ -175,14 +277,16 @@ function toggleSort(column) {
               <td>{{ purchase.PRV_Razon_Social }}</td>
               <td class="mono">{{ formatCurrency(purchase.COM_Total) }}</td>
               <td><span class="status" :data-state="purchase.COM_Estado">{{ purchase.COM_Estado }}</span></td>
-              <td><button v-if="purchase.COM_Estado === 'PENDIENTE'" class="link" type="button" @click="receive(purchase.COM_Compra)"><PackageCheck :size="14" /> Recibir</button></td>
+              <td><button v-if="['PENDIENTE', 'PARCIAL'].includes(purchase.COM_Estado)" class="link" type="button" @click="openReceive(purchase)"><PackageCheck :size="14" /> Recibir productos</button></td>
             </tr>
             <tr v-if="purchase.detalles?.length" class="detail-row">
               <td colspan="5">
                 <ul class="detail-list">
                   <li v-for="detail in purchase.detalles" :key="detail.DCO_Detalle_Compra">
                     <span class="mono">{{ detail.PRO_SKU }}</span> {{ detail.PRO_Nombre }}
-                    · {{ detail.DCO_Cantidad }} × {{ formatCurrency(detail.DCO_Costo_Unitario) }}
+                    · compradas {{ detail.DCO_Cantidad }}
+                    · pendientes {{ detail.DCO_Pendiente ?? detail.DCO_Cantidad }}
+                    · {{ formatCurrency(detail.DCO_Costo_Unitario) }}
                     · {{ formatCurrency(detail.DCO_Subtotal) }}
                   </li>
                 </ul>
@@ -192,6 +296,64 @@ function toggleSort(column) {
         </tbody>
       </table></div>
     </section>
+  </section>
+  <section v-if="inspection" class="panel">
+    <div class="panel-heading">
+      <div><PackageCheck :size="18" /><h2>Inspección de la compra #{{ inspection.id }}</h2></div>
+      <button class="button secondary" type="button" @click="inspection = null">Dejar pendiente</button>
+    </div>
+    <p class="muted">{{ inspection.proveedor }}. Solo las unidades buenas aumentan el inventario. Las dañadas quedan como incidencia y las faltantes siguen pendientes. Si el proveedor exige devolver todo el pedido, use Dejar pendiente: no se confirma el ingreso.</p>
+    <div class="table-wrap"><table class="inspect-table">
+      <thead><tr><th>Producto</th><th>Comprada</th><th>Pendiente</th><th>Buenas</th><th>Dañadas</th><th>Faltantes</th><th>Motivo y foto</th></tr></thead>
+      <tbody>
+        <tr v-for="line in inspection.lineas" :key="line.producto_id">
+          <td><span class="mono">{{ line.sku }}</span> {{ line.nombre }}</td>
+          <td>{{ line.comprada }}</td>
+          <td>{{ line.pendiente }}</td>
+          <td><input v-model.number="line.aceptada" type="number" min="0" :max="line.pendiente" /></td>
+          <td><input v-model.number="line.danada" type="number" min="0" :max="line.pendiente" /></td>
+          <td><input v-model.number="line.faltante" type="number" min="0" :max="line.pendiente" /></td>
+          <td>
+            <template v-if="Number(line.danada) > 0">
+              <input v-model="line.motivo" type="text" placeholder="Motivo del daño" maxlength="1000" />
+              <input type="file" accept="image/jpeg,image/png,image/webp" @change="setPhoto(line, $event)" />
+            </template>
+            <span v-else-if="lineGap(line) !== 0" class="muted">Faltan {{ lineGap(line) }} por clasificar</span>
+            <span v-else class="muted">Listo</span>
+          </td>
+        </tr>
+      </tbody>
+    </table></div>
+    <label class="check-line"><input v-model="inspection.loteIndivisible" type="checkbox" /> El proveedor no permite dividir el lote. Si hay dañadas o faltantes, no se confirma la recepción.</label>
+    <label>Observación<textarea v-model="inspection.observacion"></textarea></label>
+    <button class="button primary" type="button" @click="confirmReceive"><PackageCheck :size="16" /> Confirmar recepción</button>
+  </section>
+  <section v-if="incidents.length" class="panel">
+    <div class="panel-heading"><CircleAlert :size="18" /><h2>Incidencias pendientes</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>Compra</th><th>Producto</th><th>Cantidad</th><th>Motivo</th><th>Evidencia</th><th></th></tr></thead>
+      <tbody>
+        <tr v-for="incident in incidents" :key="incident.INC_Incidencia">
+          <td class="mono">{{ incident.INC_Incidencia }}</td>
+          <td class="mono">#{{ incident.COM_Compra }} · {{ incident.PRV_Razon_Social }}</td>
+          <td>{{ incident.PRO_Nombre }}</td>
+          <td>{{ incident.INC_Cantidad }}</td>
+          <td>{{ incident.INC_Motivo }}</td>
+          <td><a v-if="incident.INC_Foto_URL" :href="incident.INC_Foto_URL" target="_blank" rel="noopener">Ver foto</a><span v-else class="muted">Sin foto</span></td>
+          <td><button class="link" type="button" @click="resolution.id = incident.INC_Incidencia">Gestionar</button></td>
+        </tr>
+      </tbody>
+    </table></div>
+    <form v-if="resolution.id" class="filter-bar" @submit.prevent="resolveIncident">
+      <label>Gestión
+        <select v-model="resolution.gestion">
+          <option v-for="item in gestiones" :key="item.codigo" :value="item.codigo">{{ item.nombre }}</option>
+        </select>
+      </label>
+      <label>Resolución<input v-model="resolution.resolucion" required maxlength="1000" /></label>
+      <label v-if="resolution.gestion === 'NOTA_CREDITO'">Monto (Q)<input v-model.number="resolution.monto_credito" type="number" min="0.01" step="0.01" required /></label>
+      <button class="button primary" type="submit">Registrar gestión</button>
+    </form>
   </section>
   <section class="panel">
     <div class="panel-heading"><PackageCheck :size="18" /><h2>Recepciones</h2></div>
@@ -239,16 +401,18 @@ function toggleSort(column) {
       <p><strong>Observación:</strong> {{ selectedReceipt.REC_Observacion || '—' }}</p>
     </div>
     <div class="table-wrap"><table>
-      <thead><tr><th>SKU</th><th>Producto</th><th>Cantidad recibida</th><th>Costo unitario</th><th>Subtotal</th></tr></thead>
+      <thead><tr><th>SKU</th><th>Producto</th><th>Buenas</th><th>Dañadas</th><th>Faltantes</th><th>Costo unitario</th><th>Subtotal</th></tr></thead>
       <tbody>
         <tr v-for="detail in selectedReceipt.detalles" :key="detail.DCO_Detalle_Compra">
           <td class="mono">{{ detail.PRO_SKU }}</td>
-          <td>{{ detail.PRO_Nombre }}</td>
-          <td>{{ detail.DCO_Cantidad }}</td>
+          <td>{{ detail.PRO_Nombre }}<small v-if="detail.DRE_Motivo" class="muted"> · {{ detail.DRE_Motivo }}</small></td>
+          <td>{{ detail.DRE_Aceptada ?? detail.DCO_Cantidad }}</td>
+          <td>{{ detail.DRE_Danada ?? 0 }}</td>
+          <td>{{ detail.DRE_Faltante ?? 0 }}</td>
           <td class="mono">{{ formatCurrency(detail.DCO_Costo_Unitario) }}</td>
           <td class="mono">{{ formatCurrency(detail.DCO_Subtotal) }}</td>
         </tr>
-        <tr><td colspan="4"><strong>Total de compra</strong></td><td class="mono"><strong>{{ formatCurrency(selectedReceipt.COM_Total) }}</strong></td></tr>
+        <tr><td colspan="6"><strong>Total de compra</strong></td><td class="mono"><strong>{{ formatCurrency(selectedReceipt.COM_Total) }}</strong></td></tr>
       </tbody>
     </table></div>
   </section>

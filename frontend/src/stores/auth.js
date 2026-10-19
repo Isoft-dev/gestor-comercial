@@ -68,6 +68,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     try {
       await api.post('/logout')
+    } catch {
+      // El token puede haber expirado; la sesión local se cierra igual.
     } finally {
       token.value = null
       user.value = null
