@@ -81,11 +81,10 @@ class SaleController extends ApiController
         }
 
         $payload = $sales->toArray();
-        $payload['metodos_pago'] = cache()->remember(
-            'tec_metodos_pago',
-            300,
-            fn () => DB::table('TEC_METODO_PAGO')->where('MPA_Estado', true)->orderBy('MPA_Nombre')->get(),
-        );
+        $payload['metodos_pago'] = DB::table('TEC_METODO_PAGO')
+            ->where('MPA_Estado', true)
+            ->orderBy('MPA_Nombre')
+            ->get(['MPA_Metodo_Pago', 'MPA_Codigo', 'MPA_Nombre']);
 
         return response()->json($payload);
     }
@@ -195,7 +194,7 @@ class SaleController extends ApiController
         $data = $request->validate([
             'monto' => ['required', 'numeric', 'gt:0'],
             'metodo' => ['required', 'string', Rule::exists('TEC_METODO_PAGO', 'MPA_Codigo')->where('MPA_Estado', true)],
-            'referencia' => ['nullable', 'string', 'max:80'],
+            'referencia' => ['required_if:metodo,TRANSFERENCIA,TARJETA', 'nullable', 'string', 'max:80'],
         ]);
 
         $paymentId = DB::transaction(function () use ($request, $saleId, $data) {

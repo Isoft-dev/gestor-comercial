@@ -112,6 +112,11 @@ function selectProduct(product) {
   productDropdownOpen.value = false
 }
 
+function closeProductDropdownOnPointerDown(event) {
+  if (event.target instanceof Element && event.target.closest('.product-picker')) return
+  productDropdownOpen.value = false
+}
+
 watch(productQuery, (query) => {
   clearTimeout(productSearchTimeout)
   const requestId = ++productSearchRequest
@@ -158,12 +163,16 @@ async function submitAdjustment() {
   }
 }
 
+onMounted(() => {
+  document.addEventListener('pointerdown', closeProductDropdownOnPointerDown)
+  load()
+})
+
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closeProductDropdownOnPointerDown)
   clearTimeout(productSearchTimeout)
   clearTimeout(productBlurTimeout)
 })
-
-onMounted(load)
 
 function toggleSort(column) {
   if (sort.value === column) direction.value = direction.value === 'asc' ? 'desc' : 'asc'

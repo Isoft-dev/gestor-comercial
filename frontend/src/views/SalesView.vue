@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { formatCurrency } from '../lib/currency'
 import { useAuthStore } from '../stores/auth'
@@ -11,7 +11,11 @@ const methods = ref([])
 const error = ref('')
 const message = ref('')
 const payment = reactive({ venta_id: '', monto: 0, metodo: 'EFECTIVO', referencia: '' })
+const card = reactive({ holder: '', number: '', expiryMonth: '', expiryYear: '', cvv: '' })
+const cardPaymentStatus = ref('')
 const filters = reactive({ buscar: '', estado_pago: '', desde: '', hasta: '' })
+const requiresReference = computed(() => payment.metodo === 'TRANSFERENCIA')
+const isDemoCardPayment = computed(() => payment.metodo === 'TARJETA')
 
 async function load() {
   error.value = ''
@@ -26,9 +30,14 @@ async function load() {
       },
     })
     sales.value = data.data
-    if (data.metodos_pago) methods.value = data.metodos_pago
-    if (!methods.value.some((method) => method.MPA_Codigo === payment.metodo) && methods.value[0]) {
-      payment.metodo = methods.value[0].MPA_Codigo
+    methods.value = data.metodos_pago || []
+    if (!methods.value.some((method) => method.MPA_Codigo === payment.metodo)) {
+      payment.metodo = methods.value.find((method) => method.MPA_Codigo === 'EFECTIVO')?.MPA_Codigo
+        || methods.value[0]?.MPA_Codigo
+        || ''
+    }
+    if (!methods.value.length && auth.can('PAGOS.REGISTRAR')) {
+      error.value = 'No hay métodos de pago activos. Solicite al administrador que revise el catálogo de métodos de pago.'
     }
   } catch (requestError) {
     error.value = requestError.userMessage
@@ -41,23 +50,98 @@ function selectSale(sale) {
   payment.monto = Number(sale.VEN_Saldo)
 }
 
+function formatCardNumber(event) {
+  const digits = event.target.value.replace(/\D/g, '').slice(0, 16)
+  card.number = digits.replace(/(.{4})/g, '$1 ').trim()
+}
+
+function limitNumericInput(event, field, maxLength) {
+  card[field] = event.target.value.replace(/\D/g, '').slice(0, maxLength)
+}
+
+function changePaymentMethod() {
+  payment.referencia = ''
+  if (!isDemoCardPayment.value) clearDemoCard()
+}
+
+function validateDemoCard() {
+  if (!/^\p{L}[\p{L}\s.'-]{1,99}$/u.test(card.holder.trim())) {
+    return 'Ingrese un nombre de titular válido usando solo letras y espacios.'
+  }
+  if (!/^\d{16}$/.test(card.number.replace(/\D/g, ''))) {
+    return 'El número de tarjeta debe contener exactamente 16 dígitos.'
+  }
+
+  const year = Number(`20${card.expiryYear}`)
+  const month = Number(card.expiryMonth)
+  const now = new Date()
+  if (
+    !/^\d{2}$/.test(card.expiryMonth)
+    || month < 1
+    || month > 12
+    || !/^\d{2}$/.test(card.expiryYear)
+    || year < now.getFullYear()
+    || (year === now.getFullYear() && month < now.getMonth() + 1)
+  ) {
+    return 'La tarjeta está vencida o la fecha de vencimiento no es válida.'
+  }
+  if (!/^\d{3,4}$/.test(card.cvv)) return 'El CVV debe contener 3 o 4 dígitos.'
+  return ''
+}
+
+function clearDemoCard() {
+  card.holder = ''
+  card.number = ''
+  card.expiryMonth = ''
+  card.expiryYear = ''
+  card.cvv = ''
+}
+
 async function submit() {
   error.value = ''
   message.value = ''
+  if (!payment.metodo) {
+    error.value = 'No hay un método de pago disponible. Actualice la página o solicite revisar el catálogo.'
+    return
+  }
+
+  const demoCardPayment = isDemoCardPayment.value
+  if (demoCardPayment) {
+    error.value = validateDemoCard()
+    if (error.value) return
+  }
+
+  const reference = demoCardPayment
+    ? `DEMO-${Date.now()}`
+    : payment.referencia
+
   try {
+    if (demoCardPayment) {
+      cardPaymentStatus.value = 'processing'
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    }
     await api.post(`/ventas/${payment.venta_id}/pagos`, {
       monto: payment.monto,
       metodo: payment.metodo,
-      referencia: payment.referencia,
+      referencia: reference,
     })
-    message.value = 'Pago registrado.'
+    message.value = demoCardPayment ? 'Pago de demostración registrado correctamente.' : 'Pago registrado.'
     payment.venta_id = ''
     payment.monto = 0
     payment.referencia = ''
+    clearDemoCard()
     await load()
+    if (demoCardPayment) cardPaymentStatus.value = 'success'
   } catch (requestError) {
+    cardPaymentStatus.value = ''
     error.value = requestError.userMessage
+  } finally {
+    clearDemoCard()
   }
+}
+
+function closeCardPaymentStatus() {
+  cardPaymentStatus.value = ''
 }
 
 onMounted(load)
@@ -72,14 +156,95 @@ onMounted(load)
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <form v-if="auth.can('PAGOS.REGISTRAR')" class="panel compact-form" @submit.prevent="submit">
+  <form v-if="auth.can('PAGOS.REGISTRAR')" class="panel compact-form" autocomplete="off" @submit.prevent="submit">
     <div class="panel-heading"><Banknote :size="18" /><h2>Registrar pago</h2></div>
     <label>Venta<select v-model="payment.venta_id" required @change="selectSale(sales.find((sale) => sale.VEN_Venta == payment.venta_id))"><option value="">Seleccione</option><option v-for="sale in sales.filter((item) => Number(item.VEN_Saldo) > 0)" :key="sale.VEN_Venta" :value="sale.VEN_Venta">#{{ sale.VEN_Venta }} · Saldo {{ formatCurrency(sale.VEN_Saldo) }}</option></select></label>
     <label>Monto (Q)<input v-model.number="payment.monto" type="number" min="0.01" step="0.01" required /></label>
-    <label>Método<select v-model="payment.metodo"><option v-for="method in methods" :key="method.MPA_Metodo_Pago" :value="method.MPA_Codigo">{{ method.MPA_Nombre }}</option></select></label>
-    <label>Referencia<input v-model="payment.referencia" /></label>
-    <button class="button primary"><Banknote :size="16" /> Registrar</button>
+    <label>Método
+      <select v-model="payment.metodo" required :disabled="methods.length === 0" @change="changePaymentMethod">
+        <option value="" disabled>Seleccione un método</option>
+        <option v-for="method in methods" :key="method.MPA_Metodo_Pago" :value="method.MPA_Codigo">{{ method.MPA_Nombre }}</option>
+      </select>
+    </label>
+    <label v-if="requiresReference">No. de pago o solicitud
+      <input v-model.trim="payment.referencia" maxlength="80" required placeholder="Ingrese la referencia de la transferencia" />
+    </label>
+    <template v-if="isDemoCardPayment">
+      <label>Nombre del titular
+        <input v-model.trim="card.holder" autocomplete="off" maxlength="100" required />
+      </label>
+      <label>Número de tarjeta
+        <input
+          :value="card.number"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          maxlength="19"
+          placeholder="0000 0000 0000 0000"
+          required
+          @input="formatCardNumber"
+        />
+      </label>
+      <label>Vencimiento
+        <div class="form-grid card-expiry">
+          <input
+            :value="card.expiryMonth"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            maxlength="2"
+            pattern="0[1-9]|1[0-2]"
+            placeholder="MM"
+            aria-label="Mes de vencimiento"
+            required
+            @input="limitNumericInput($event, 'expiryMonth', 2)"
+          />
+          <input
+            :value="card.expiryYear"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            maxlength="2"
+            pattern="[0-9]{2}"
+            placeholder="AA"
+            aria-label="Año de vencimiento"
+            required
+            @input="limitNumericInput($event, 'expiryYear', 2)"
+          />
+        </div>
+      </label>
+      <label>CVV
+        <input
+          :value="card.cvv"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          maxlength="4"
+          pattern="[0-9]{3,4}"
+          required
+          @input="limitNumericInput($event, 'cvv', 4)"
+        />
+      </label>
+    </template>
+    <button class="button primary" type="submit" :disabled="cardPaymentStatus === 'processing' || methods.length === 0"><Banknote :size="16" /> Registrar</button>
   </form>
+  <Teleport to="body">
+    <div v-if="cardPaymentStatus" class="dialog-backdrop" role="presentation">
+      <section class="dialog-card demo-payment-dialog" role="dialog" aria-modal="true" aria-live="polite">
+        <div class="dialog-icon" :class="cardPaymentStatus === 'success' ? 'success' : 'warning'">
+          <CircleCheck v-if="cardPaymentStatus === 'success'" :size="22" />
+          <span v-else class="payment-spinner" aria-hidden="true"></span>
+        </div>
+        <div class="dialog-copy">
+          <h2>{{ cardPaymentStatus === 'success' ? 'Pago realizado correctamente' : 'Procesando pago' }}</h2>
+          <p>{{ cardPaymentStatus === 'success' ? 'El pago de demostración se registró correctamente.' : 'Espere un momento, estamos procesando el pago de demostración…' }}</p>
+        </div>
+        <div v-if="cardPaymentStatus === 'success'" class="dialog-actions">
+          <button class="button primary" type="button" @click="closeCardPaymentStatus">Aceptar</button>
+        </div>
+      </section>
+    </div>
+  </Teleport>
   <section class="panel">
     <div class="panel-heading"><Receipt :size="18" /><h2>Ventas finalizadas</h2></div>
     <form class="filter-bar" @submit.prevent="load">

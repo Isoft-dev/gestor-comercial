@@ -24,10 +24,10 @@ class AuditController extends ApiController
             $query->where('a.USU_Usuario', $request->integer('usuario_id'));
         }
         if ($request->filled('modulo')) {
-            $query->where('a.AUD_Modulo', $request->query('modulo'));
+            $query->where('a.AUD_Modulo', 'like', '%'.$request->query('modulo').'%');
         }
         if ($request->filled('accion')) {
-            $query->where('a.AUD_Accion', $request->query('accion'));
+            $query->where('a.AUD_Accion', 'like', '%'.$request->query('accion').'%');
         }
         if ($request->filled('desde')) {
             $query->whereDate('a.AUD_Fecha', '>=', $request->query('desde'));
@@ -36,6 +36,21 @@ class AuditController extends ApiController
             $query->whereDate('a.AUD_Fecha', '<=', $request->query('hasta'));
         }
 
-        return response()->json($query->orderByDesc('a.AUD_Fecha')->paginate(30));
+        $page = $query->orderByDesc('a.AUD_Fecha')->paginate(30);
+        $payload = $page->toArray();
+        $payload['catalogos'] = [
+            'modulos' => DB::table('TEC_AUDITORIA')
+                ->select('AUD_Modulo')
+                ->distinct()
+                ->orderBy('AUD_Modulo')
+                ->pluck('AUD_Modulo'),
+            'acciones' => DB::table('TEC_AUDITORIA')
+                ->select('AUD_Accion')
+                ->distinct()
+                ->orderBy('AUD_Accion')
+                ->pluck('AUD_Accion'),
+        ];
+
+        return response()->json($payload);
     }
 }

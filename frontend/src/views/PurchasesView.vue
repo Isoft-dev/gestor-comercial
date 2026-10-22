@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
@@ -25,6 +25,36 @@ const inspection = ref(null)
 const incidents = ref([])
 const resolution = reactive({ id: '', gestion: 'DEVOLUCION', resolucion: '', monto_credito: '' })
 const form = reactive({ proveedor_id: '', producto_id: '', cantidad: 1, costo_unitario: 1, observacion: '' })
+const providerQuery = ref('')
+const providerDropdownOpen = ref(false)
+const productQuery = ref('')
+const productDropdownOpen = ref(false)
+let providerBlurTimeout
+let productBlurTimeout
+const filteredProviders = computed(() => {
+  const query = providerQuery.value.trim().toLocaleLowerCase()
+  if (!query) return providers.value
+
+  return providers.value.filter((provider) =>
+    [
+      provider.PRV_Identificacion_Fiscal,
+      provider.PRV_Razon_Social,
+      provider.PRV_Contacto,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLocaleLowerCase()
+      .includes(query),
+  )
+})
+const filteredProducts = computed(() => {
+  const query = productQuery.value.trim().toLocaleLowerCase()
+  if (!query) return products.value
+
+  return products.value.filter((product) =>
+    `${product.PRO_SKU} ${product.PRO_Nombre}`.toLocaleLowerCase().includes(query),
+  )
+})
 const gestiones = [
   { codigo: 'DEVOLUCION', nombre: 'Devolución al proveedor' },
   { codigo: 'GARANTIA', nombre: 'Garantía' },
@@ -86,6 +116,56 @@ function changeReceiptPage(page) {
   loadReceipts()
 }
 
+function openProviderOptions() {
+  clearTimeout(providerBlurTimeout)
+  clearTimeout(productBlurTimeout)
+  productDropdownOpen.value = false
+  providerDropdownOpen.value = true
+}
+
+function openProductOptions() {
+  clearTimeout(productBlurTimeout)
+  clearTimeout(providerBlurTimeout)
+  providerDropdownOpen.value = false
+  productDropdownOpen.value = true
+}
+
+function closePurchaseDropdowns() {
+  clearTimeout(providerBlurTimeout)
+  clearTimeout(productBlurTimeout)
+  providerDropdownOpen.value = false
+  productDropdownOpen.value = false
+}
+
+function closePurchaseDropdownsOnPointerDown(event) {
+  if (event.target instanceof Element && event.target.closest('.order-picker')) return
+  closePurchaseDropdowns()
+}
+
+function updateProviderQuery(value) {
+  providerQuery.value = value
+  form.proveedor_id = ''
+  providerDropdownOpen.value = true
+}
+
+function updateProductQuery(value) {
+  productQuery.value = value
+  form.producto_id = ''
+  productDropdownOpen.value = true
+}
+
+function selectProvider(provider) {
+  providerQuery.value = provider.PRV_Razon_Social
+  form.proveedor_id = provider.PRV_Proveedor
+  providerDropdownOpen.value = false
+}
+
+function selectProduct(product) {
+  productQuery.value = `${product.PRO_SKU} · ${product.PRO_Nombre}`
+  form.producto_id = product.PRO_Producto
+  productDropdownOpen.value = false
+}
+
 async function viewReceipt(id) {
   error.value = ''
   try {
@@ -97,6 +177,12 @@ async function viewReceipt(id) {
 }
 
 async function submit() {
+  if (!form.proveedor_id || !form.producto_id) {
+    error.value = 'Seleccione un proveedor y un producto de las sugerencias.'
+    return
+  }
+
+  error.value = ''
   try {
     await api.post('/compras', {
       proveedor_id: form.proveedor_id,
@@ -218,7 +304,10 @@ async function resolveIncident() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  document.addEventListener('pointerdown', closePurchaseDropdownsOnPointerDown)
+  load()
+})
 
 function toggleSort(column) {
   if (sort.value === column) direction.value = direction.value === 'asc' ? 'desc' : 'asc'
@@ -228,6 +317,12 @@ function toggleSort(column) {
   }
   load()
 }
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closePurchaseDropdownsOnPointerDown)
+  clearTimeout(providerBlurTimeout)
+  clearTimeout(productBlurTimeout)
+})
 </script>
 
 <template>
@@ -242,8 +337,70 @@ function toggleSort(column) {
   <section class="two-column">
     <form class="panel" @submit.prevent="submit">
       <div class="panel-heading"><Plus :size="18" /><h2>Nueva orden</h2></div>
-      <label>Proveedor<select v-model="form.proveedor_id" required><option value="">Seleccione</option><option v-for="provider in providers" :key="provider.PRV_Proveedor" :value="provider.PRV_Proveedor">{{ provider.PRV_Razon_Social }}</option></select></label>
-      <label>Producto<select v-model="form.producto_id" required><option value="">Seleccione</option><option v-for="product in products" :key="product.PRO_Producto" :value="product.PRO_Producto">{{ product.PRO_SKU }} · {{ product.PRO_Nombre }}</option></select></label>
+      <label>Proveedor
+        <div class="order-picker">
+          <input
+            :value="providerQuery"
+            autocomplete="off"
+            placeholder="Escriba nombre, identificación o contacto"
+            required
+            role="combobox"
+            aria-controls="purchase-provider-options"
+            :aria-expanded="providerDropdownOpen"
+            @input="updateProviderQuery($event.target.value)"
+            @focus="openProviderOptions"
+            @blur="providerBlurTimeout = setTimeout(() => { providerDropdownOpen = false }, 150)"
+            @keydown.escape="providerDropdownOpen = false"
+          />
+          <div v-if="providerDropdownOpen" id="purchase-provider-options" class="product-options" role="listbox">
+            <p v-if="filteredProviders.length === 0" class="product-option-empty">No hay proveedores que coincidan.</p>
+            <button
+              v-for="provider in filteredProviders"
+              :key="provider.PRV_Proveedor"
+              class="product-option"
+              type="button"
+              role="option"
+              :aria-selected="form.proveedor_id === provider.PRV_Proveedor"
+              @mousedown.prevent
+              @click="selectProvider(provider)"
+            >
+              {{ provider.PRV_Razon_Social }}<span v-if="provider.PRV_Identificacion_Fiscal"> · {{ provider.PRV_Identificacion_Fiscal }}</span>
+            </button>
+          </div>
+        </div>
+      </label>
+      <label>Producto
+        <div class="order-picker">
+          <input
+            :value="productQuery"
+            autocomplete="off"
+            placeholder="Escriba SKU o nombre del producto"
+            required
+            role="combobox"
+            aria-controls="purchase-product-options"
+            :aria-expanded="productDropdownOpen"
+            @input="updateProductQuery($event.target.value)"
+            @focus="openProductOptions"
+            @blur="productBlurTimeout = setTimeout(() => { productDropdownOpen = false }, 150)"
+            @keydown.escape="productDropdownOpen = false"
+          />
+          <div v-if="productDropdownOpen" id="purchase-product-options" class="product-options" role="listbox">
+            <p v-if="filteredProducts.length === 0" class="product-option-empty">No hay productos que coincidan.</p>
+            <button
+              v-for="product in filteredProducts"
+              :key="product.PRO_Producto"
+              class="product-option"
+              type="button"
+              role="option"
+              :aria-selected="form.producto_id === product.PRO_Producto"
+              @mousedown.prevent
+              @click="selectProduct(product)"
+            >
+              <span class="mono">{{ product.PRO_SKU }}</span> · {{ product.PRO_Nombre }}
+            </button>
+          </div>
+        </div>
+      </label>
       <div class="form-grid"><label>Cantidad<input v-model.number="form.cantidad" type="number" min="1" required /></label><label>Costo unitario (Q)<input v-model.number="form.costo_unitario" type="number" min="0.01" step="0.01" required /></label></div>
       <label>Observación<textarea v-model="form.observacion"></textarea></label>
       <button class="button primary"><Plus :size="16" /> Registrar compra</button>

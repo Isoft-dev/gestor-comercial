@@ -334,6 +334,17 @@ class CatalogController extends ApiController
             'marcas' => 'MAR_Estado',
             'productos' => 'PRO_Estado',
         };
+        if (! $active && in_array($type, ['categorias', 'marcas'], true)) {
+            $productForeignKey = $type === 'categorias' ? 'CAT_Categoria' : 'MAR_Marca';
+            $hasProducts = DB::table('TEC_PRODUCTO')->where($productForeignKey, $id)->exists();
+            $catalogName = $type === 'categorias' ? 'categoría' : 'marca';
+            abort_if(
+                $hasProducts,
+                422,
+                "No se puede inactivar esta {$catalogName} porque tiene productos asociados. Reasigne primero los productos a otra {$catalogName}.",
+            );
+        }
+
         DB::table($config['table'])->where($config['key'], $id)->update([
             $stateColumn => $active,
             'updated_at' => now(),

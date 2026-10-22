@@ -78,7 +78,9 @@ class OrderController extends ApiController
                 'CLI_Cliente',
                 'CLI_Identificacion',
                 'CLI_Primer_Nombre',
+                'CLI_Segundo_Nombre',
                 'CLI_Primer_Apellido',
+                'CLI_Segundo_Apellido',
             ]);
         $payload['productos'] = $this->productOptions();
 

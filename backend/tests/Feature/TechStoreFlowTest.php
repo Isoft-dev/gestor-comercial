@@ -155,6 +155,85 @@ class TechStoreFlowTest extends TestCase
         $this->assertDatabaseCount('TEC_PAGO', 0);
     }
 
+    public function test_transfer_payment_requires_payment_reference(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $saleId = DB::table('TEC_VENTA')->insertGetId([
+            'PED_Pedido' => $this->createApprovedOrder($admin),
+            'USU_Usuario' => $admin->USU_Usuario,
+            'VEN_Fecha' => now(),
+            'VEN_Total' => 100,
+            'VEN_Pagado' => 0,
+            'VEN_Saldo' => 100,
+            'EPA_Estado_Pago' => Catalogos::estadoPago('PENDIENTE'),
+            'ESV_Estado_Venta' => Catalogos::estadoVenta('FINALIZADA'),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], 'VEN_Venta');
+
+        $this->postJson("/api/ventas/{$saleId}/pagos", [
+            'monto' => 100,
+            'metodo' => 'TRANSFERENCIA',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['referencia'])
+            ->assertJsonFragment(['referencia' => ['El campo referencia es obligatorio cuando método de pago sea TRANSFERENCIA.']]);
+
+        $this->assertDatabaseCount('TEC_PAGO', 0);
+    }
+
+    public function test_sales_payment_options_return_active_methods_without_stale_cache(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+
+        cache()->put('tec_metodos_pago', collect(), 300);
+
+        $this->getJson('/api/ventas?con_opciones=1')
+            ->assertOk()
+            ->assertJsonCount(3, 'metodos_pago')
+            ->assertJsonFragment(['MPA_Codigo' => 'EFECTIVO'])
+            ->assertJsonFragment(['MPA_Codigo' => 'TARJETA'])
+            ->assertJsonFragment(['MPA_Codigo' => 'TRANSFERENCIA']);
+    }
+
+    public function test_card_demo_payment_requires_and_records_only_demo_reference(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $saleId = DB::table('TEC_VENTA')->insertGetId([
+            'PED_Pedido' => $this->createApprovedOrder($admin),
+            'USU_Usuario' => $admin->USU_Usuario,
+            'VEN_Fecha' => now(),
+            'VEN_Total' => 100,
+            'VEN_Pagado' => 0,
+            'VEN_Saldo' => 100,
+            'EPA_Estado_Pago' => Catalogos::estadoPago('PENDIENTE'),
+            'ESV_Estado_Venta' => Catalogos::estadoVenta('FINALIZADA'),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], 'VEN_Venta');
+
+        $this->postJson("/api/ventas/{$saleId}/pagos", [
+            'monto' => 100,
+            'metodo' => 'TARJETA',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['referencia']);
+
+        $this->postJson("/api/ventas/{$saleId}/pagos", [
+            'monto' => 100,
+            'metodo' => 'TARJETA',
+            'referencia' => 'DEMO-12345',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('TEC_PAGO', [
+            'VEN_Venta' => $saleId,
+            'PAG_Referencia' => 'DEMO-12345',
+        ]);
+    }
+
     public function test_user_email_must_be_unique(): void
     {
         $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
@@ -1049,6 +1128,50 @@ class TechStoreFlowTest extends TestCase
             'CAT_Categoria' => $id,
             'CAT_Estado' => true,
         ]);
+    }
+
+    public function test_category_with_products_cannot_be_inactivated(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $category = DB::table('TEC_CATEGORIA')->value('CAT_Categoria');
+
+        $this->deleteJson("/api/catalogos/categorias/{$category}")
+            ->assertUnprocessable()
+            ->assertJson([
+                'message' => 'No se puede inactivar esta categoría porque tiene productos asociados. Reasigne primero los productos a otra categoría.',
+            ]);
+        $this->assertDatabaseHas('TEC_CATEGORIA', [
+            'CAT_Categoria' => $category,
+            'CAT_Estado' => true,
+        ]);
+    }
+
+    public function test_catalog_validation_errors_are_friendly_and_in_spanish(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+
+        $this->postJson('/api/catalogos/productos', [
+            'categoria_id' => 'invalida',
+            'sku' => 'SKU CON ESPACIOS',
+            'nombre' => '',
+            'costo' => 'texto',
+            'precio' => 0,
+            'existencia_minima' => -1,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['categoria_id', 'marca_id', 'sku', 'nombre', 'costo', 'precio'])
+            ->assertJsonFragment(['categoria_id' => ['El campo categoría debe ser un número entero.']])
+            ->assertJsonFragment(['nombre' => ['El campo nombre es obligatorio.']]);
+
+        $this->postJson('/api/catalogos/proveedores', [
+            'identificacion_fiscal' => 'NIT-INVALIDO',
+            'razon_social' => 'Proveedor válido',
+            'correo' => 'correo-invalido',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonFragment(['correo' => ['El correo debe tener un formato válido, por ejemplo nombre@dominio.com.']]);
     }
 
     public function test_person_name_rejects_symbols(): void

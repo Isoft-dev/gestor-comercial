@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askPrompt } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
@@ -13,7 +13,44 @@ const products = ref([])
 const error = ref('')
 const message = ref('')
 const form = reactive({ cliente_id: '', producto_id: '', cantidad: 1, descuento_porcentaje: 0 })
+const clientQuery = ref('')
+const productQuery = ref('')
+const clientDropdownOpen = ref(false)
+const productDropdownOpen = ref(false)
+const stockWarning = ref('')
 const filters = reactive({ buscar: '', estado: '' })
+let clientBlurTimeout
+let productBlurTimeout
+let stockWarningTimeout
+const filteredClients = computed(() => {
+  const query = clientQuery.value.trim().toLocaleLowerCase()
+  if (!query) return clients.value
+
+  return clients.value.filter((client) =>
+    [
+      client.CLI_Identificacion,
+      client.CLI_Primer_Nombre,
+      client.CLI_Segundo_Nombre,
+      client.CLI_Primer_Apellido,
+      client.CLI_Segundo_Apellido,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLocaleLowerCase()
+      .includes(query),
+  )
+})
+const filteredProducts = computed(() => {
+  const query = productQuery.value.trim().toLocaleLowerCase()
+  if (!query) return products.value
+
+  return products.value.filter((product) =>
+    `${product.PRO_SKU} ${product.PRO_Nombre}`.toLocaleLowerCase().includes(query),
+  )
+})
+const selectedProduct = computed(() =>
+  products.value.find((product) => Number(product.PRO_Producto) === Number(form.producto_id)),
+)
 const estados = [
   { codigo: 'CREADO', nombre: 'Creado' },
   { codigo: 'PENDIENTE_APROBACION', nombre: 'Pendiente de aprobación' },
@@ -41,9 +78,76 @@ async function load() {
   }
 }
 
+function openClientOptions() {
+  clearTimeout(clientBlurTimeout)
+  clearTimeout(productBlurTimeout)
+  productDropdownOpen.value = false
+  clientDropdownOpen.value = true
+}
+
+function openProductOptions() {
+  clearTimeout(productBlurTimeout)
+  clearTimeout(clientBlurTimeout)
+  clientDropdownOpen.value = false
+  productDropdownOpen.value = true
+}
+
+function closeOrderDropdowns() {
+  clearTimeout(clientBlurTimeout)
+  clearTimeout(productBlurTimeout)
+  clientDropdownOpen.value = false
+  productDropdownOpen.value = false
+}
+
+function closeOrderDropdownsOnPointerDown(event) {
+  if (event.target instanceof Element && event.target.closest('.order-picker')) return
+  closeOrderDropdowns()
+}
+
+function updateClientQuery(value) {
+  clientQuery.value = value
+  form.cliente_id = ''
+  clientDropdownOpen.value = true
+}
+
+function updateProductQuery(value) {
+  productQuery.value = value
+  form.producto_id = ''
+  productDropdownOpen.value = true
+}
+
+function selectClient(client) {
+  clientQuery.value = `${client.CLI_Identificacion} · ${[
+    client.CLI_Primer_Nombre,
+    client.CLI_Segundo_Nombre,
+    client.CLI_Primer_Apellido,
+    client.CLI_Segundo_Apellido,
+  ].filter(Boolean).join(' ')}`
+  form.cliente_id = client.CLI_Cliente
+  clientDropdownOpen.value = false
+}
+
+function selectProduct(product) {
+  if (Number(product.INV_Existencia) <= 0) {
+    stockWarning.value = `${product.PRO_Nombre}: no disponible por falta de stock.`
+    clearTimeout(stockWarningTimeout)
+    stockWarningTimeout = setTimeout(() => { stockWarning.value = '' }, 3000)
+    return
+  }
+
+  productQuery.value = `${product.PRO_SKU} · ${product.PRO_Nombre}`
+  form.producto_id = product.PRO_Producto
+  productDropdownOpen.value = false
+}
+
 async function submit() {
   error.value = ''
   message.value = ''
+  if (!form.cliente_id || !form.producto_id) {
+    error.value = 'Seleccione un cliente y un producto disponible de las listas.'
+    return
+  }
+
   try {
     await api.post('/pedidos', {
       cliente_id: form.cliente_id,
@@ -91,7 +195,17 @@ async function decide(id, decision) {
   if (motivo) action(`/pedidos/${id}/decidir`, { decision, motivo })
 }
 
-onMounted(load)
+onMounted(() => {
+  document.addEventListener('pointerdown', closeOrderDropdownsOnPointerDown)
+  load()
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closeOrderDropdownsOnPointerDown)
+  clearTimeout(clientBlurTimeout)
+  clearTimeout(productBlurTimeout)
+  clearTimeout(stockWarningTimeout)
+})
 </script>
 
 <template>
@@ -106,13 +220,82 @@ onMounted(load)
   <section class="two-column">
     <form v-if="auth.can('PEDIDOS.REGISTRAR')" class="panel" @submit.prevent="submit">
       <div class="panel-heading"><Plus :size="18" /><h2>Nuevo pedido</h2></div>
-      <label>Cliente<select v-model="form.cliente_id" required><option value="">Seleccione</option><option v-for="client in clients" :key="client.CLI_Cliente" :value="client.CLI_Cliente">{{ client.CLI_Identificacion }} · {{ client.CLI_Primer_Nombre }} {{ client.CLI_Primer_Apellido }}</option></select></label>
-      <label>Producto<select v-model="form.producto_id" required><option value="">Seleccione</option><option v-for="product in products" :key="product.PRO_Producto" :value="product.PRO_Producto">{{ product.PRO_SKU }} · {{ product.PRO_Nombre }} ({{ product.INV_Existencia }})</option></select></label>
-      <div class="form-grid"><label>Cantidad<input v-model.number="form.cantidad" type="number" min="1" required /></label><label>Descuento %<input v-model.number="form.descuento_porcentaje" type="number" min="0" max="100" step="0.01" /></label></div>
+      <label>Cliente
+        <div class="order-picker">
+          <input
+            :value="clientQuery"
+            autocomplete="off"
+            placeholder="Escriba identificación o nombre"
+            required
+            role="combobox"
+            aria-controls="order-client-options"
+            :aria-expanded="clientDropdownOpen"
+            @input="updateClientQuery($event.target.value)"
+            @focus="openClientOptions"
+            @blur="clientBlurTimeout = setTimeout(() => { clientDropdownOpen = false }, 150)"
+            @keydown.escape="clientDropdownOpen = false"
+          />
+          <div v-if="clientDropdownOpen" id="order-client-options" class="product-options" role="listbox">
+            <p v-if="filteredClients.length === 0" class="product-option-empty">No hay clientes que coincidan.</p>
+            <button
+              v-for="client in filteredClients"
+              :key="client.CLI_Cliente"
+              class="product-option"
+              type="button"
+              role="option"
+              :aria-selected="form.cliente_id === client.CLI_Cliente"
+              @mousedown.prevent
+              @click="selectClient(client)"
+            >
+              {{ client.CLI_Identificacion }} · {{ [client.CLI_Primer_Nombre, client.CLI_Segundo_Nombre, client.CLI_Primer_Apellido, client.CLI_Segundo_Apellido].filter(Boolean).join(' ') }}
+            </button>
+          </div>
+        </div>
+      </label>
+      <label>Producto
+        <div class="order-picker">
+          <input
+            :value="productQuery"
+            autocomplete="off"
+            placeholder="Escriba SKU o nombre del producto"
+            required
+            role="combobox"
+            aria-controls="order-product-options"
+            :aria-expanded="productDropdownOpen"
+            @input="updateProductQuery($event.target.value)"
+            @focus="openProductOptions"
+            @blur="productBlurTimeout = setTimeout(() => { productDropdownOpen = false }, 150)"
+            @keydown.escape="productDropdownOpen = false"
+          />
+          <div v-if="productDropdownOpen" id="order-product-options" class="product-options" role="listbox">
+            <p v-if="filteredProducts.length === 0" class="product-option-empty">No hay productos que coincidan.</p>
+            <button
+              v-for="product in filteredProducts"
+              :key="product.PRO_Producto"
+              class="product-option"
+              :class="{ unavailable: Number(product.INV_Existencia) <= 0 }"
+              type="button"
+              role="option"
+              :aria-disabled="Number(product.INV_Existencia) <= 0"
+              :aria-selected="form.producto_id === product.PRO_Producto"
+              @mousedown.prevent
+              @click="selectProduct(product)"
+            >
+              <span class="mono">{{ product.PRO_SKU }}</span> · {{ product.PRO_Nombre }} ({{ product.INV_Existencia }})
+              <span v-if="Number(product.INV_Existencia) <= 0"> — No disponible</span>
+            </button>
+          </div>
+        </div>
+      </label>
+      <div class="form-grid">
+        <label>Cantidad<input v-model.number="form.cantidad" type="number" min="1" required /><small v-if="selectedProduct">Existencia disponible: {{ selectedProduct.INV_Existencia }}</small></label>
+        <label>Descuento %<input v-model.number="form.descuento_porcentaje" type="number" min="0" max="100" step="0.01" /></label>
+      </div>
+      <p v-if="stockWarning" class="stock-warning-toast" role="alert">{{ stockWarning }}</p>
       <p v-if="Number(form.descuento_porcentaje) > 10" class="muted">Un descuento mayor a 10 % queda pendiente hasta que un supervisor lo apruebe.</p>
       <button class="button primary"><Plus :size="16" /> Crear pedido</button>
     </form>
-    <section class="panel">
+    <section class="panel" :class="{ 'full-width': !auth.can('PEDIDOS.REGISTRAR') }">
       <div class="panel-heading"><ClipboardList :size="18" /><h2>Pedidos</h2></div>
       <form class="filter-bar" @submit.prevent="load">
         <label>Buscar<input v-model="filters.buscar" type="search" placeholder="ID, identificación o cliente" /></label>

@@ -30,18 +30,26 @@ api.interceptors.response.use(
       window.location.assign('/acceso-denegado')
     }
     const validation = error.response?.data?.errors
-    const firstValidation = validation ? Object.values(validation).flat()[0] : null
-    error.userMessage = friendlyMessage(firstValidation || error.response?.data?.message, status, Boolean(error.response))
+    const validationMessages = validation
+      ? [...new Set(Object.values(validation).flat().filter(Boolean))]
+      : []
+    const validationMessage = validationMessages.length ? validationMessages.join(' ') : null
+    error.userMessage = friendlyMessage(
+      validationMessage || error.response?.data?.message,
+      status,
+      Boolean(error.response),
+      Boolean(validationMessage),
+    )
     return Promise.reject(error)
   },
 )
 
-function friendlyMessage(raw, status, hasResponse) {
+function friendlyMessage(raw, status, hasResponse, isValidation = false) {
   if (!hasResponse) {
     return 'No hay conexión con el servidor. Verifique e intente de nuevo.'
   }
   const text = String(raw ?? '').trim()
-  if (text && !looksTechnical(text)) return text
+  if (text && (isValidation || !looksTechnical(text))) return text
   if (status === 401) return 'Debe iniciar sesión para continuar.'
   if (status === 403) return 'No tiene permiso para esta operación.'
   if (status === 404) return 'No se encontró el registro solicitado.'

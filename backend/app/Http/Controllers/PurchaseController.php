@@ -54,7 +54,12 @@ class PurchaseController extends ApiController
         $payload['proveedores'] = DB::table('TEC_PROVEEDOR')
             ->where('PRV_Estado', true)
             ->orderBy('PRV_Razon_Social')
-            ->get(['PRV_Proveedor', 'PRV_Razon_Social']);
+            ->get([
+                'PRV_Proveedor',
+                'PRV_Identificacion_Fiscal',
+                'PRV_Razon_Social',
+                'PRV_Contacto',
+            ]);
         $payload['productos'] = $this->productOptions();
 
         return response()->json($payload);
