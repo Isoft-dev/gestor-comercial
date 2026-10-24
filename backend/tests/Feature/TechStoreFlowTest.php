@@ -108,6 +108,45 @@ class TechStoreFlowTest extends TestCase
             'AUD_Modulo' => 'VENTAS',
             'AUD_Accion' => 'FINALIZAR',
         ]);
+
+        $saleDetails = $this->getJson("/api/ventas?con_opciones=1&buscar={$saleId}")
+            ->assertOk()
+            ->assertJsonPath('data.data.0.PED_Pedido', $orderId)
+            ->assertJsonStructure([
+                'data' => [
+                    'data' => [[
+                        'VEN_Fecha',
+                        'PED_Fecha',
+                        'PED_Subtotal',
+                        'PED_Descuento_Porcentaje',
+                        'PED_Descuento_Monto',
+                        'PED_Total',
+                        'PED_Estado',
+                        'CLI_Identificacion',
+                        'CLI_Correo',
+                        'CLI_Telefono',
+                        'VEN_Vendedor_Nombre',
+                        'VEN_Vendedor_Apellido',
+                        'detalles' => [[
+                            'DVE_Cantidad',
+                            'DVE_Precio_Unitario',
+                            'DVE_Subtotal',
+                            'PRO_SKU',
+                            'PRO_Nombre',
+                        ]],
+                        'pagos' => [[
+                            'PAG_Monto',
+                            'PAG_Fecha',
+                            'PAG_Referencia',
+                            'PAG_Metodo',
+                            'metodo_nombre',
+                            'PAG_Usuario_Nombre',
+                            'PAG_Usuario_Apellido',
+                        ]],
+                    ]],
+                ],
+            ]);
+        $this->assertEquals(5, (float) $saleDetails->json('data.data.0.PED_Descuento_Porcentaje'));
     }
 
     public function test_sale_with_insufficient_inventory_is_rejected_without_partial_changes(): void
