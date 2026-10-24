@@ -763,9 +763,13 @@ class TechStoreFlowTest extends TestCase
                 'productos_mas_vendidos',
             ]);
 
-        $this->get('/api/reportes/ventas.pdf')
-            ->assertOk()
-            ->assertHeader('content-type', 'application/pdf');
+        foreach (['ventas', 'productos', 'inventario', 'compras'] as $tipo) {
+            $pdf = $this->get("/api/reportes/{$tipo}.pdf")
+                ->assertOk()
+                ->assertHeader('content-type', 'application/pdf');
+
+            $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+        }
     }
 
     public function test_login_locks_after_five_failed_attempts_and_admin_can_unlock(): void

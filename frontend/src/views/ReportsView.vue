@@ -7,6 +7,7 @@ import { formatCurrency } from '../lib/currency'
 import { BarChart3, CircleAlert, Download, ExternalLink, FileText, Filter, PackageMinus, ShoppingCart, TrendingUp, Truck, X } from '@lucide/vue'
 
 const reports = ref(null)
+const loading = ref(true)
 const filters = reactive({
   desde: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
   hasta: new Date().toISOString().slice(0, 10),
@@ -21,6 +22,32 @@ const salesCanvas = ref(null)
 const productsCanvas = ref(null)
 let salesChart
 let productsChart
+let salesAnimationFrame = 0
+let productsAnimationFrame = 0
+
+function chartOptions(currency = false) {
+  return {
+    ...chartDefaults({ currency }),
+    animation: {
+      duration: 1400,
+      easing: 'easeOutQuart',
+      delay: (context) => (
+        context.type === 'data' && context.mode === 'default'
+          ? context.dataIndex * 65
+          : 0
+      ),
+    },
+  }
+}
+
+function animateChart(chart, values) {
+  chart.data.datasets[0].data = values.map(() => 0)
+  return window.requestAnimationFrame(() => {
+    if (!chart.canvas?.isConnected) return
+    chart.data.datasets[0].data = values
+    chart.update()
+  })
+}
 
 const titles = {
   ventas: 'Ventas por fecha',
@@ -40,44 +67,54 @@ function queryParams() {
 }
 
 async function load() {
+  loading.value = true
+  error.value = ''
   try {
     const { data } = await api.get('/reportes', { params: queryParams() })
     reports.value = data
     await nextTick()
+    window.cancelAnimationFrame(salesAnimationFrame)
+    window.cancelAnimationFrame(productsAnimationFrame)
     salesChart?.destroy()
     productsChart?.destroy()
     salesChart = null
     productsChart = null
     if (salesCanvas.value && data.ventas_por_fecha.length) {
+      const values = data.ventas_por_fecha.map((item) => item.total)
       salesChart = new Chart(salesCanvas.value, {
         type: 'bar',
         data: {
           labels: data.ventas_por_fecha.map((item) => item.fecha),
           datasets: [{
             label: 'Ventas',
-            data: data.ventas_por_fecha.map((item) => item.total),
+            data: values.map(() => 0),
             ...barStyle(chartTheme.teal),
           }],
         },
-        options: chartDefaults({ currency: true }),
+        options: chartOptions(true),
       })
+      salesAnimationFrame = animateChart(salesChart, values)
     }
     if (productsCanvas.value && data.productos_mas_vendidos.length) {
+      const values = data.productos_mas_vendidos.map((item) => item.cantidad)
       productsChart = new Chart(productsCanvas.value, {
         type: 'bar',
         data: {
           labels: data.productos_mas_vendidos.map((item) => item.PRO_Nombre),
           datasets: [{
             label: 'Unidades',
-            data: data.productos_mas_vendidos.map((item) => item.cantidad),
+            data: values.map(() => 0),
             ...barStyle(chartTheme.amber),
           }],
         },
-        options: chartDefaults(),
+        options: chartOptions(),
       })
+      productsAnimationFrame = animateChart(productsChart, values)
     }
   } catch (requestError) {
-    error.value = requestError.userMessage
+    error.value = requestError.userMessage || 'No se pudieron cargar los reportes.'
+  } finally {
+    loading.value = false
   }
 }
 
@@ -140,6 +177,8 @@ function openPreviewTab() {
 
 onMounted(load)
 onUnmounted(() => {
+  window.cancelAnimationFrame(salesAnimationFrame)
+  window.cancelAnimationFrame(productsAnimationFrame)
   salesChart?.destroy()
   productsChart?.destroy()
   closePreview()
@@ -177,13 +216,14 @@ onUnmounted(() => {
         <option v-for="item in reports?.opciones?.proveedores || []" :key="item.PRV_Proveedor" :value="item.PRV_Proveedor">{{ item.PRV_Razon_Social }}</option>
       </select>
     </label>
-    <button class="button primary"><Filter :size="16" /> Aplicar</button>
+    <button class="button primary" :disabled="loading"><Filter :size="16" /> {{ loading ? 'Cargando…' : 'Aplicar' }}</button>
   </form>
   <p class="muted">El período aplica a ventas, productos y compras. El estado de pago filtra las ventas. La categoría filtra productos e inventario. El proveedor filtra las compras. El inventario bajo no depende de las fechas.</p>
+  <p v-if="loading" class="muted" role="status">Cargando reportes y preparando los gráficos…</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
   <template v-if="reports">
     <p class="muted">Generado: {{ reports.generado_en }} · {{ reports.criterios }}</p>
-    <section class="chart-grid">
+    <section class="chart-grid" :aria-busy="loading">
       <article class="panel chart-panel">
         <div class="panel-heading"><TrendingUp :size="18" /><h2>Ventas por fecha</h2></div>
         <p v-if="!reports.ventas_por_fecha.length" class="muted">No hay ventas en el período.</p>
@@ -199,22 +239,22 @@ onUnmounted(() => {
       <article class="panel">
         <div class="panel-heading"><TrendingUp :size="18" /><h2>Ventas por fecha</h2></div>
         <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Cantidad</th><th>Total</th></tr></thead><tbody><tr v-for="row in reports.ventas_por_fecha" :key="row.fecha"><td>{{ row.fecha }}</td><td>{{ row.cantidad }}</td><td class="mono">{{ formatCurrency(row.total) }}</td></tr></tbody></table></div>
-        <button class="button secondary" type="button" :disabled="opening" @click="openPdf('ventas')"><FileText :size="16" /> Ver PDF</button>
+        <button class="button secondary" type="button" :disabled="opening || loading" @click="openPdf('ventas')"><FileText :size="16" /> Ver PDF</button>
       </article>
       <article class="panel">
         <div class="panel-heading"><ShoppingCart :size="18" /><h2>Productos más vendidos</h2></div>
         <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Unidades</th><th>Total</th></tr></thead><tbody><tr v-for="row in reports.productos_mas_vendidos" :key="row.PRO_SKU"><td>{{ row.PRO_Nombre }}</td><td>{{ row.cantidad }}</td><td class="mono">{{ formatCurrency(row.total) }}</td></tr></tbody></table></div>
-        <button class="button secondary" type="button" :disabled="opening" @click="openPdf('productos')"><FileText :size="16" /> Ver PDF</button>
+        <button class="button secondary" type="button" :disabled="opening || loading" @click="openPdf('productos')"><FileText :size="16" /> Ver PDF</button>
       </article>
       <article class="panel">
         <div class="panel-heading"><PackageMinus :size="18" /><h2>Inventario bajo</h2></div>
         <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Stock</th><th>Mínimo</th></tr></thead><tbody><tr v-for="row in reports.inventario_bajo" :key="row.PRO_SKU"><td>{{ row.PRO_Nombre }}</td><td>{{ row.INV_Existencia }}</td><td>{{ row.PRO_Existencia_Minima }}</td></tr></tbody></table></div>
-        <button class="button secondary" type="button" :disabled="opening" @click="openPdf('inventario')"><FileText :size="16" /> Ver PDF</button>
+        <button class="button secondary" type="button" :disabled="opening || loading" @click="openPdf('inventario')"><FileText :size="16" /> Ver PDF</button>
       </article>
       <article class="panel">
         <div class="panel-heading"><Truck :size="18" /><h2>Compras por proveedor</h2></div>
         <div class="table-wrap"><table><thead><tr><th>Proveedor</th><th>Compras</th><th>Total</th></tr></thead><tbody><tr v-for="row in reports.compras_por_proveedor" :key="row.proveedor"><td>{{ row.proveedor }}</td><td>{{ row.cantidad }}</td><td class="mono">{{ formatCurrency(row.total) }}</td></tr></tbody></table></div>
-        <button class="button secondary" type="button" :disabled="opening" @click="openPdf('compras')"><FileText :size="16" /> Ver PDF</button>
+        <button class="button secondary" type="button" :disabled="opening || loading" @click="openPdf('compras')"><FileText :size="16" /> Ver PDF</button>
       </article>
     </section>
   </template>
