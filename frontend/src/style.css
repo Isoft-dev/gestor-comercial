@@ -531,6 +531,28 @@ tr.detail-row td { padding-top: 0; background: #f8fafc; color: var(--muted); }
 .inspect-table input[type="number"] { width: 76px; }
 .inspect-table input[type="file"] { margin-top: 6px; }
 .detail-list li { margin: 2px 0; }
+.dialog-card.sale-detail-dialog { width: min(720px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow-y: auto; align-content: start; gap: 16px; padding: 24px; }
+.sale-detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.sale-detail-heading h2 { margin: 0; }
+.sale-readonly-note { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #f2d7a5; border-radius: 6px; background: #fff8e8; color: #80500c; font-size: .88rem; }
+.sale-readonly-note svg { flex-shrink: 0; }
+.sale-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.sale-detail-block { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: #f8fafc; }
+.sale-detail-block h3 { margin: 0 0 10px; font-size: .9rem; }
+.sale-detail-block dl { display: grid; gap: 10px; margin: 0; }
+.sale-detail-grid:not(.sale-totals-payments) .sale-detail-block dl > div { display: grid; gap: 3px; }
+.sale-detail-block dt { color: var(--muted); font-size: .78rem; font-weight: 600; }
+.sale-detail-block dd { margin: 0; text-align: left; overflow-wrap: anywhere; }
+.sale-lines-table { min-width: 600px; }
+.sale-totals-payments { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
+.sale-amounts .sale-total { padding-top: 8px; border-top: 1px solid var(--line); font-weight: 800; color: var(--ink); }
+.sale-payments-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.sale-payments-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.sale-payments-list li:last-child { padding-bottom: 0; border-bottom: 0; }
+.sale-payments-list li > div { display: flex; justify-content: space-between; gap: 12px; }
+.sale-payments-list li > small { grid-column: 1 / -1; }
+.sale-payments-list li span,
+.sale-payments-list li small { color: var(--muted); font-size: .8rem; }
 
 .status {
   display: inline-flex;
@@ -810,4 +832,9 @@ code { white-space: pre-wrap; font-size: .72rem; color: #3d4654; font-family: va
   .shop-layout { grid-template-columns: 1fr; }
   .cart-panel { position: static; }
   .button { min-height: 44px; }
+  .sale-detail-grid { grid-template-columns: 1fr; }
+  .dialog-card.sale-detail-dialog { width: calc(100vw - 40px); gap: 14px; padding: 20px 18px; }
+  .sale-detail-block { padding: 14px; }
+  .sale-detail-grid:not(.sale-totals-payments) .sale-detail-block dl > div { display: grid; gap: 3px; }
+  .sale-payments-list li > div { align-items: flex-start; flex-direction: column; gap: 2px; }
 }

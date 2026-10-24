@@ -16,15 +16,29 @@ class SaleController extends ApiController
         $query = DB::table('TEC_VENTA as v')
             ->join('TEC_PEDIDO as p', 'p.PED_Pedido', '=', 'v.PED_Pedido')
             ->join('TEC_CLIENTE as c', 'c.CLI_Cliente', '=', 'p.CLI_Cliente')
+            ->join('TEC_USUARIO as seller', 'seller.USU_Usuario', '=', 'v.USU_Usuario')
+            ->join('TEC_ESTADO_PEDIDO as order_state', 'order_state.ESP_Estado_Pedido', '=', 'p.ESP_Estado_Pedido')
             ->join('TEC_ESTADO_PAGO as ep', 'ep.EPA_Estado_Pago', '=', 'v.EPA_Estado_Pago')
             ->join('TEC_ESTADO_VENTA as ev', 'ev.ESV_Estado_Venta', '=', 'v.ESV_Estado_Venta')
             ->select(
                 'v.*',
+                'p.PED_Fecha',
+                'p.PED_Subtotal',
+                'p.PED_Descuento_Porcentaje',
+                'p.PED_Descuento_Monto',
+                'p.PED_Total',
+                'order_state.ESP_Codigo as PED_Estado',
                 'ep.EPA_Codigo as VEN_Estado_Pago',
                 'ev.ESV_Codigo as VEN_Estado',
                 'c.CLI_Identificacion',
                 'c.CLI_Primer_Nombre',
+                'c.CLI_Segundo_Nombre',
                 'c.CLI_Primer_Apellido',
+                'c.CLI_Segundo_Apellido',
+                'c.CLI_Correo',
+                'c.CLI_Telefono',
+                'seller.USU_Primer_Nombre as VEN_Vendedor_Nombre',
+                'seller.USU_Primer_Apellido as VEN_Vendedor_Apellido',
             );
 
         if ($request->filled('cliente_id')) {
@@ -59,8 +73,15 @@ class SaleController extends ApiController
             ? collect()
             : DB::table('TEC_PAGO as pg')
                 ->join('TEC_METODO_PAGO as mp', 'mp.MPA_Metodo_Pago', '=', 'pg.MPA_Metodo_Pago')
+                ->join('TEC_USUARIO as payment_user', 'payment_user.USU_Usuario', '=', 'pg.USU_Usuario')
                 ->whereIn('pg.VEN_Venta', $ids)
-                ->select('pg.*', 'mp.MPA_Codigo as PAG_Metodo', 'mp.MPA_Nombre as metodo_nombre')
+                ->select(
+                    'pg.*',
+                    'mp.MPA_Codigo as PAG_Metodo',
+                    'mp.MPA_Nombre as metodo_nombre',
+                    'payment_user.USU_Primer_Nombre as PAG_Usuario_Nombre',
+                    'payment_user.USU_Primer_Apellido as PAG_Usuario_Apellido',
+                )
                 ->orderByDesc('pg.PAG_Fecha')
                 ->get()
                 ->groupBy('VEN_Venta');

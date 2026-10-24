@@ -3,10 +3,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { formatCurrency } from '../lib/currency'
 import { useAuthStore } from '../stores/auth'
-import { Banknote, CircleAlert, CircleCheck, Filter, Receipt, Wallet } from '@lucide/vue'
+import { Banknote, CircleAlert, CircleCheck, Eye, Filter, LockKeyhole, Receipt, Wallet, X } from '@lucide/vue'
 
 const auth = useAuthStore()
 const sales = ref([])
+const selectedSale = ref(null)
 const methods = ref([])
 const error = ref('')
 const message = ref('')
@@ -261,9 +262,9 @@ onMounted(load)
       <label>Hasta<input v-model="filters.hasta" type="date" /></label>
       <button class="button primary" type="submit"><Filter :size="16" /> Filtrar</button>
     </form>
-    <div class="table-wrap"><table><thead><tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Estado</th></tr></thead>
+    <div class="table-wrap"><table><thead><tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Estado</th><th>Acciones</th></tr></thead>
       <tbody>
-        <tr v-if="sales.length === 0"><td colspan="7">No hay ventas que coincidan con la búsqueda.</td></tr>
+        <tr v-if="sales.length === 0"><td colspan="8">No hay ventas que coincidan con la búsqueda.</td></tr>
         <template v-for="sale in sales" :key="sale.VEN_Venta">
           <tr>
             <td class="mono">{{ sale.VEN_Venta }}</td>
@@ -273,26 +274,84 @@ onMounted(load)
             <td class="mono">{{ formatCurrency(sale.VEN_Pagado) }}</td>
             <td class="mono">{{ formatCurrency(sale.VEN_Saldo) }}</td>
             <td><span class="status" :data-state="sale.VEN_Estado_Pago">{{ sale.VEN_Estado_Pago }}</span></td>
-          </tr>
-          <tr v-if="sale.detalles?.length || sale.pagos?.length" class="detail-row">
-            <td colspan="7">
-              <ul v-if="sale.detalles?.length" class="detail-list">
-                <li v-for="detail in sale.detalles" :key="detail.DVE_Detalle_Venta">
-                  <span class="mono">{{ detail.PRO_SKU }}</span> {{ detail.PRO_Nombre }}
-                  · {{ detail.DVE_Cantidad }} × {{ formatCurrency(detail.DVE_Precio_Unitario) }}
-                  · {{ formatCurrency(detail.DVE_Subtotal) }}
-                </li>
-              </ul>
-              <p v-if="sale.pagos?.length" class="muted">
-                Pagos:
-                <span v-for="(pago, index) in sale.pagos" :key="pago.PAG_Pago">
-                  <template v-if="index"> · </template>{{ pago.metodo_nombre }} {{ formatCurrency(pago.PAG_Monto) }}
-                </span>
-              </p>
-            </td>
+            <td><button class="link" type="button" @click="selectedSale = sale"><Eye :size="14" /> Ver Detalle</button></td>
           </tr>
         </template>
       </tbody>
     </table></div>
   </section>
+  <Teleport to="body">
+    <div v-if="selectedSale" class="dialog-backdrop" role="presentation" @click.self="selectedSale = null">
+      <section class="dialog-card sale-detail-dialog" role="dialog" aria-modal="true" :aria-label="`Detalle de venta ${selectedSale.VEN_Venta}`">
+        <header class="sale-detail-heading">
+          <div>
+            <p class="eyebrow">Venta #{{ selectedSale.VEN_Venta }} · Pedido #{{ selectedSale.PED_Pedido }}</p>
+            <h2>Detalle de venta</h2>
+          </div>
+          <button class="icon-button" type="button" aria-label="Cerrar detalle" @click="selectedSale = null"><X :size="18" /></button>
+        </header>
+        <p class="sale-readonly-note"><LockKeyhole :size="16" /> Venta finalizada: este registro es de solo lectura y no se puede editar.</p>
+        <div class="sale-detail-grid">
+          <section class="sale-detail-block">
+            <h3>Pedido</h3>
+            <dl>
+              <div><dt>Fecha de venta</dt><dd>{{ selectedSale.VEN_Fecha }}</dd></div>
+              <div><dt>Fecha del pedido</dt><dd>{{ selectedSale.PED_Fecha }}</dd></div>
+              <div><dt>Estado</dt><dd>{{ selectedSale.PED_Estado }}</dd></div>
+              <div><dt>Atendido por</dt><dd>{{ selectedSale.VEN_Vendedor_Nombre }} {{ selectedSale.VEN_Vendedor_Apellido }}</dd></div>
+            </dl>
+          </section>
+          <section class="sale-detail-block">
+            <h3>Cliente</h3>
+            <dl>
+              <div><dt>Nombre</dt><dd>{{ selectedSale.CLI_Primer_Nombre }} {{ selectedSale.CLI_Segundo_Nombre }} {{ selectedSale.CLI_Primer_Apellido }} {{ selectedSale.CLI_Segundo_Apellido }}</dd></div>
+              <div><dt>Identificación</dt><dd>{{ selectedSale.CLI_Identificacion }}</dd></div>
+              <div><dt>Correo</dt><dd>{{ selectedSale.CLI_Correo || 'No registrado' }}</dd></div>
+              <div><dt>Teléfono</dt><dd>{{ selectedSale.CLI_Telefono || 'No registrado' }}</dd></div>
+            </dl>
+          </section>
+        </div>
+        <section class="sale-detail-block">
+          <h3>Productos del pedido</h3>
+          <div class="table-wrap"><table class="sale-lines-table">
+            <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th></tr></thead>
+            <tbody>
+              <tr v-for="detail in selectedSale.detalles" :key="detail.DVE_Detalle_Venta">
+                <td><span class="mono">{{ detail.PRO_SKU }}</span> · {{ detail.PRO_Nombre }}</td>
+                <td>{{ detail.DVE_Cantidad }}</td>
+                <td class="mono">{{ formatCurrency(detail.DVE_Precio_Unitario) }}</td>
+                <td class="mono">{{ formatCurrency(detail.DVE_Subtotal) }}</td>
+              </tr>
+              <tr v-if="!selectedSale.detalles?.length"><td colspan="4">No hay productos registrados.</td></tr>
+            </tbody>
+          </table></div>
+        </section>
+        <div class="sale-detail-grid sale-totals-payments">
+          <section class="sale-detail-block">
+            <h3>Importes</h3>
+            <dl class="sale-amounts">
+              <div><dt>Subtotal</dt><dd>{{ formatCurrency(selectedSale.PED_Subtotal) }}</dd></div>
+              <div><dt>Descuento ({{ Number(selectedSale.PED_Descuento_Porcentaje) }} %)</dt><dd>− {{ formatCurrency(selectedSale.PED_Descuento_Monto) }}</dd></div>
+              <div class="sale-total"><dt>Total</dt><dd>{{ formatCurrency(selectedSale.VEN_Total) }}</dd></div>
+              <div><dt>Pagado</dt><dd>{{ formatCurrency(selectedSale.VEN_Pagado) }}</dd></div>
+              <div><dt>Saldo pendiente</dt><dd>{{ formatCurrency(selectedSale.VEN_Saldo) }}</dd></div>
+            </dl>
+          </section>
+          <section class="sale-detail-block">
+            <h3>Pagos</h3>
+            <ul v-if="selectedSale.pagos?.length" class="sale-payments-list">
+              <li v-for="pago in selectedSale.pagos" :key="pago.PAG_Pago">
+                <div><strong>{{ pago.metodo_nombre }}</strong><span>{{ pago.PAG_Fecha }}</span></div>
+                <strong class="mono">{{ formatCurrency(pago.PAG_Monto) }}</strong>
+                <small v-if="pago.PAG_Referencia">Referencia: {{ pago.PAG_Referencia }}</small>
+                <small>Registrado por: {{ pago.PAG_Usuario_Nombre }} {{ pago.PAG_Usuario_Apellido }}</small>
+              </li>
+            </ul>
+            <p v-else class="muted">Aún no hay pagos registrados.</p>
+          </section>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" @click="selectedSale = null">Cerrar</button></div>
+      </section>
+    </div>
+  </Teleport>
 </template>
