@@ -47,12 +47,7 @@ router.beforeEach(async (to, from) => {
   if (!to.meta.public && !auth.isAuthenticated) return '/login'
   if (to.path === '/login' && auth.isAuthenticated) return auth.homePath()
   if (auth.isAuthenticated && !to.meta.public) {
-    try {
-      await auth.ensureFreshProfile()
-    } catch {
-      await auth.logout()
-      return '/login'
-    }
+    auth.ensureFreshProfile().catch(() => {})
   }
   if (!allowed(auth, to.meta.permission)) return '/acceso-denegado'
   return true

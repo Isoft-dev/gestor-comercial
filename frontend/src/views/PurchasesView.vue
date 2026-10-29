@@ -1,9 +1,9 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
-import { CircleAlert, CircleCheck, Eye, PackageCheck, Plus, Search, Truck, X } from '@lucide/vue'
+import { CircleAlert, CircleCheck, Eye, PackageCheck, Plus, RefreshCw, Search, Truck, X } from '@lucide/vue'
 import SortHeader from '../components/SortHeader.vue'
 
 const purchases = ref([])
@@ -25,6 +25,8 @@ const inspection = ref(null)
 const incidents = ref([])
 const resolution = reactive({ id: '', gestion: 'DEVOLUCION', resolucion: '', monto_credito: '' })
 const form = reactive({ proveedor_id: '', producto_id: '', cantidad: 1, costo_unitario: 1, observacion: '' })
+const formOpen = ref(false)
+const formPanel = ref(null)
 const providerQuery = ref('')
 const providerDropdownOpen = ref(false)
 const productQuery = ref('')
@@ -63,20 +65,24 @@ const gestiones = [
 ]
 
 async function load() {
+  const opciones = !providers.value.length || !products.value.length
   try {
-    const { data } = await api.get('/compras', {
-      params: {
-        con_opciones: 1,
-        estado: purchaseStatus.value || undefined,
-        orden: sort.value,
-        direccion: direction.value,
-      },
-    })
+    const [response] = await Promise.all([
+      api.get('/compras', {
+        params: {
+          con_opciones: opciones ? 1 : undefined,
+          estado: purchaseStatus.value || undefined,
+          orden: sort.value,
+          direccion: direction.value,
+        },
+      }),
+      loadReceipts(),
+      loadIncidents(),
+    ])
+    const data = response.data
     purchases.value = data.data
     if (data.proveedores) providers.value = data.proveedores
     if (data.productos) products.value = data.productos
-    await loadReceipts()
-    await loadIncidents()
   } catch (requestError) {
     error.value = requestError.userMessage
   }
@@ -176,6 +182,25 @@ async function viewReceipt(id) {
   }
 }
 
+function closeForm() {
+  formOpen.value = false
+  form.proveedor_id = ''
+  form.producto_id = ''
+  form.cantidad = 1
+  form.costo_unitario = 1
+  form.observacion = ''
+  providerQuery.value = ''
+  productQuery.value = ''
+  providerDropdownOpen.value = false
+  productDropdownOpen.value = false
+}
+
+function openCreate() {
+  closeForm()
+  formOpen.value = true
+  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
+}
+
 async function submit() {
   if (!form.proveedor_id || !form.producto_id) {
     error.value = 'Seleccione un proveedor y un producto de las sugerencias.'
@@ -190,6 +215,7 @@ async function submit() {
       detalles: [{ producto_id: form.producto_id, cantidad: form.cantidad, costo_unitario: form.costo_unitario }],
     })
     message.value = 'Orden de compra registrada.'
+    closeForm()
     await load()
   } catch (requestError) {
     error.value = requestError.userMessage
@@ -331,11 +357,14 @@ onBeforeUnmount(() => {
       <p class="eyebrow">Abastecimiento</p>
       <h1 class="page-title"><Truck :size="26" :stroke-width="2" /> Compras y recepción</h1>
     </div>
+    <div class="header-actions">
+      <button class="button primary" type="button" @click="openCreate"><Plus :size="16" /> Nueva orden</button>
+      <button class="button secondary" type="button" @click="load"><RefreshCw :size="16" /> Actualizar</button>
+    </div>
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <section class="two-column">
-    <form class="panel" @submit.prevent="submit">
+  <form v-if="formOpen" ref="formPanel" class="panel" @submit.prevent="submit">
       <div class="panel-heading"><Plus :size="18" /><h2>Nueva orden</h2></div>
       <label>Proveedor
         <div class="order-picker">
@@ -403,7 +432,10 @@ onBeforeUnmount(() => {
       </label>
       <div class="form-grid"><label>Cantidad<input v-model.number="form.cantidad" type="number" min="1" required /></label><label>Costo unitario (Q)<input v-model.number="form.costo_unitario" type="number" min="0.01" step="0.01" required /></label></div>
       <label>Observación<textarea v-model="form.observacion"></textarea></label>
-      <button class="button primary"><Plus :size="16" /> Registrar compra</button>
+      <div class="actions">
+        <button class="button primary" type="submit"><Plus :size="16" /> Registrar compra</button>
+        <button class="button secondary" type="button" @click="closeForm"><X :size="16" /> Cancelar</button>
+      </div>
     </form>
     <section class="panel">
       <div class="panel-heading"><PackageCheck :size="18" /><h2>Órdenes recientes</h2></div>
@@ -453,7 +485,6 @@ onBeforeUnmount(() => {
         </tbody>
       </table></div>
     </section>
-  </section>
   <section v-if="inspection" class="panel">
     <div class="panel-heading">
       <div><PackageCheck :size="18" /><h2>Inspección de la compra #{{ inspection.id }}</h2></div>

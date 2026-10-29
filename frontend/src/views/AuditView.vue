@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
-import { CircleAlert, Filter, ShieldCheck } from '@lucide/vue'
+import { CircleAlert, Filter, RefreshCw, ShieldCheck } from '@lucide/vue'
 
 const rows = ref([])
 const modules = ref([])
@@ -70,6 +70,7 @@ onMounted(load)
       <p class="eyebrow">Trazabilidad</p>
       <h1 class="page-title"><ShieldCheck :size="26" :stroke-width="2" /> Auditoría</h1>
     </div>
+    <button class="button secondary" type="button" @click="load"><RefreshCw :size="16" /> Actualizar</button>
   </header>
   <form class="filter-bar" @submit.prevent="load">
     <label>Módulo

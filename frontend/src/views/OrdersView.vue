@@ -1,10 +1,10 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askPrompt } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
 import { useAuthStore } from '../stores/auth'
-import { Ban, Check, CircleAlert, CircleCheck, ClipboardList, Filter, Plus, ShoppingBag, X } from '@lucide/vue'
+import { Ban, Check, CircleAlert, CircleCheck, ClipboardList, Filter, Plus, RefreshCw, ShoppingBag, X } from '@lucide/vue'
 
 const auth = useAuthStore()
 const orders = ref([])
@@ -13,6 +13,8 @@ const products = ref([])
 const error = ref('')
 const message = ref('')
 const form = reactive({ cliente_id: '', producto_id: '', cantidad: 1, descuento_porcentaje: 0 })
+const formOpen = ref(false)
+const formPanel = ref(null)
 const clientQuery = ref('')
 const productQuery = ref('')
 const clientDropdownOpen = ref(false)
@@ -61,11 +63,12 @@ const estados = [
 ]
 
 async function load() {
+  const opciones = !clients.value.length || !products.value.length
   error.value = ''
   try {
     const { data } = await api.get('/pedidos', {
       params: {
-        con_opciones: 1,
+        con_opciones: opciones ? 1 : undefined,
         buscar: filters.buscar || undefined,
         estado: filters.estado || undefined,
       },
@@ -140,11 +143,45 @@ function selectProduct(product) {
   productDropdownOpen.value = false
 }
 
+function lineExceedsStock(detail) {
+  return Number(detail.DPE_Cantidad) > Number(detail.INV_Existencia ?? 0)
+}
+
+function orderExceedsStock(order) {
+  return (order.detalles || []).some(lineExceedsStock)
+}
+
+function clearOrderForm() {
+  form.cliente_id = ''
+  form.producto_id = ''
+  form.cantidad = 1
+  form.descuento_porcentaje = 0
+  clientQuery.value = ''
+  productQuery.value = ''
+  clientDropdownOpen.value = false
+  productDropdownOpen.value = false
+}
+
+function closeForm() {
+  formOpen.value = false
+  clearOrderForm()
+}
+
+function openCreate() {
+  clearOrderForm()
+  formOpen.value = true
+  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
+}
+
 async function submit() {
   error.value = ''
   message.value = ''
   if (!form.cliente_id || !form.producto_id) {
     error.value = 'Seleccione un cliente y un producto disponible de las listas.'
+    return
+  }
+  if (selectedProduct.value && Number(form.cantidad) > Number(selectedProduct.value.INV_Existencia)) {
+    error.value = `No se puede vender más de la existencia disponible. Hay ${selectedProduct.value.INV_Existencia} de ${selectedProduct.value.PRO_Nombre}.`
     return
   }
 
@@ -157,6 +194,7 @@ async function submit() {
     message.value = Number(form.descuento_porcentaje) > 10
       ? 'Pedido creado. El descuento supera 10 % y requerirá aprobación.'
       : 'Pedido creado.'
+    closeForm()
     await load()
   } catch (requestError) {
     error.value = requestError.userMessage
@@ -214,11 +252,14 @@ onBeforeUnmount(() => {
       <p class="eyebrow">Flujo comercial</p>
       <h1 class="page-title"><ClipboardList :size="26" :stroke-width="2" /> Pedidos y aprobaciones</h1>
     </div>
+    <div class="header-actions">
+      <button v-if="auth.can('PEDIDOS.REGISTRAR')" class="button primary" type="button" @click="openCreate"><Plus :size="16" /> Nuevo pedido</button>
+      <button class="button secondary" type="button" @click="load"><RefreshCw :size="16" /> Actualizar</button>
+    </div>
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <section class="two-column">
-    <form v-if="auth.can('PEDIDOS.REGISTRAR')" class="panel" @submit.prevent="submit">
+  <form v-if="auth.can('PEDIDOS.REGISTRAR') && formOpen" ref="formPanel" class="panel" @submit.prevent="submit">
       <div class="panel-heading"><Plus :size="18" /><h2>Nuevo pedido</h2></div>
       <label>Cliente
         <div class="order-picker">
@@ -288,14 +329,18 @@ onBeforeUnmount(() => {
         </div>
       </label>
       <div class="form-grid">
-        <label>Cantidad<input v-model.number="form.cantidad" type="number" min="1" required /><small v-if="selectedProduct">Existencia disponible: {{ selectedProduct.INV_Existencia }}</small></label>
+        <label>Cantidad<input v-model.number="form.cantidad" type="number" min="1" :max="selectedProduct ? Number(selectedProduct.INV_Existencia) : undefined" required /><small v-if="selectedProduct">Existencia disponible: {{ selectedProduct.INV_Existencia }}</small></label>
         <label>Descuento %<input v-model.number="form.descuento_porcentaje" type="number" min="0" max="100" step="0.01" /></label>
       </div>
       <p v-if="stockWarning" class="stock-warning-toast" role="alert">{{ stockWarning }}</p>
+      <p v-if="selectedProduct && Number(form.cantidad) > Number(selectedProduct.INV_Existencia)" class="alert error"><CircleAlert :size="16" /> No se puede vender más de la existencia disponible.</p>
       <p v-if="Number(form.descuento_porcentaje) > 10" class="muted">Un descuento mayor a 10 % queda pendiente hasta que un supervisor lo apruebe.</p>
-      <button class="button primary"><Plus :size="16" /> Crear pedido</button>
+      <div class="actions">
+        <button class="button primary" type="submit"><Plus :size="16" /> Crear pedido</button>
+        <button class="button secondary" type="button" @click="closeForm"><X :size="16" /> Cancelar</button>
+      </div>
     </form>
-    <section class="panel" :class="{ 'full-width': !auth.can('PEDIDOS.REGISTRAR') }">
+    <section class="panel">
       <div class="panel-heading"><ClipboardList :size="18" /><h2>Pedidos</h2></div>
       <form class="filter-bar" @submit.prevent="load">
         <label>Buscar<input v-model="filters.buscar" type="search" placeholder="ID, identificación o cliente" /></label>
@@ -323,7 +368,7 @@ onBeforeUnmount(() => {
                   <button class="link" type="button" @click="decide(order.PED_Pedido, 'APROBAR')"><Check :size="14" /> Aprobar</button>
                   <button class="link danger" type="button" @click="decide(order.PED_Pedido, 'RECHAZAR')"><X :size="14" /> Rechazar</button>
                 </template>
-                <button v-if="auth.can('VENTAS.REGISTRAR') && ['APROBADO', 'EN_PROCESO'].includes(order.PED_Estado)" class="link" type="button" @click="action(`/pedidos/${order.PED_Pedido}/vender`)"><ShoppingBag :size="14" /> Vender</button>
+                <button v-if="auth.can('VENTAS.REGISTRAR') && ['APROBADO', 'EN_PROCESO'].includes(order.PED_Estado)" class="link" type="button" :disabled="orderExceedsStock(order)" :title="orderExceedsStock(order) ? 'La cantidad supera la existencia disponible' : ''" @click="action(`/pedidos/${order.PED_Pedido}/vender`)"><ShoppingBag :size="14" /> Vender</button>
                 <button v-if="auth.can('PEDIDOS.REGISTRAR') && !['COMPLETADO', 'CANCELADO'].includes(order.PED_Estado)" class="link danger" type="button" @click="cancel(order.PED_Pedido)"><Ban :size="14" /> Cancelar</button>
               </td>
             </tr>
@@ -334,6 +379,8 @@ onBeforeUnmount(() => {
                     <span class="mono">{{ detail.PRO_SKU }}</span> {{ detail.PRO_Nombre }}
                     · {{ detail.DPE_Cantidad }} × {{ formatCurrency(detail.DPE_Precio_Unitario) }}
                     · {{ formatCurrency(detail.DPE_Subtotal) }}
+                    · existencia {{ detail.INV_Existencia ?? 0 }}
+                    <span v-if="lineExceedsStock(detail)"> — supera la existencia</span>
                   </li>
                 </ul>
                 <p v-if="order.historial?.length" class="muted">
@@ -348,5 +395,4 @@ onBeforeUnmount(() => {
         </tbody>
       </table></div>
     </section>
-  </section>
 </template>

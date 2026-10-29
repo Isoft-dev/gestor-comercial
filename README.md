@@ -25,7 +25,7 @@ El ambiente local usa **MySQL de XAMPP** y Apache en `http://techstore.local`. `
 
 ## Instalación
 
-La guía para clonar y levantar el proyecto en otro equipo está en [`INSTALACION.md`](INSTALACION.md).
+La guía para clonar y levantar el proyecto en otro equipo está en [`docs/INSTALACION.md`](docs/INSTALACION.md).
 
 ## Requisitos
 

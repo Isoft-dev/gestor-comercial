@@ -808,6 +808,11 @@ class TechStoreFlowTest extends TestCase
                 ->assertHeader('content-type', 'application/pdf');
 
             $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+
+            $withChart = $this->get("/api/reportes/{$tipo}.pdf?grafica=1")
+                ->assertOk()
+                ->assertHeader('content-type', 'application/pdf');
+            $this->assertStringStartsWith('%PDF-', $withChart->getContent());
         }
     }
 

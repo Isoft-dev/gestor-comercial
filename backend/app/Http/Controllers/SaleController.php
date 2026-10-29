@@ -125,20 +125,12 @@ class SaleController extends ApiController
             abort_unless(in_array($order->PED_Estado, ['APROBADO', 'EN_PROCESO'], true), 409, 'El pedido no está aprobado.');
             abort_if(DB::table('TEC_VENTA')->where('PED_Pedido', $orderId)->exists(), 409, 'El pedido ya fue vendido.');
 
-            $details = DB::table('TEC_DETALLE_PEDIDO')->where('PED_Pedido', $orderId)->get();
+            $details = DB::table('TEC_DETALLE_PEDIDO as d')
+                ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'd.PRO_Producto')
+                ->where('d.PED_Pedido', $orderId)
+                ->select('d.*', 'p.PRO_Nombre')
+                ->get();
             abort_if($details->isEmpty(), 422, 'No se puede completar una venta sin productos.');
-
-            foreach ($details as $detail) {
-                $stock = DB::table('TEC_INVENTARIO')
-                    ->where('PRO_Producto', $detail->PRO_Producto)
-                    ->lockForUpdate()
-                    ->first();
-                abort_if(
-                    ! $stock || $stock->INV_Existencia < $detail->DPE_Cantidad,
-                    409,
-                    'Inventario insuficiente para uno o más productos.',
-                );
-            }
 
             $saleId = DB::table('TEC_VENTA')->insertGetId([
                 'PED_Pedido' => $orderId,
@@ -158,8 +150,14 @@ class SaleController extends ApiController
                     ->where('PRO_Producto', $detail->PRO_Producto)
                     ->lockForUpdate()
                     ->first();
-                $before = (int) $stock->INV_Existencia;
-                $after = $before - (int) $detail->DPE_Cantidad;
+                $needed = (int) $detail->DPE_Cantidad;
+                $before = (int) ($stock->INV_Existencia ?? 0);
+                abort_if(
+                    ! $stock || $before < $needed,
+                    409,
+                    "No se puede vender más de la existencia disponible de {$detail->PRO_Nombre}. Hay {$before} y el pedido pide {$needed}.",
+                );
+                $after = $before - $needed;
                 DB::table('TEC_INVENTARIO')->where('INV_Inventario', $stock->INV_Inventario)->update([
                     'INV_Existencia' => $after,
                     'updated_at' => now(),

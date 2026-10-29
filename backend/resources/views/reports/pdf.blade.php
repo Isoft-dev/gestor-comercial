@@ -18,6 +18,20 @@
     <p>Período: {{ $desde }} al {{ $hasta }}</p>
     <p>{{ $criterios }}</p>
     <p>Generado: {{ $generado_en }}</p>
+    @if (! empty($grafica))
+        <h2 style="font-size: 14px; margin: 18px 0 8px;">Gráfica</h2>
+        <table>
+            @foreach ($grafica as $barra)
+                <tr>
+                    <td style="width: 34%; border: 0;">{{ $barra['etiqueta'] }}</td>
+                    <td style="border: 0;">
+                        <div style="background: #1f6b4a; height: 10px; width: {{ $barra['ancho'] }}%;"></div>
+                    </td>
+                    <td style="width: 18%; border: 0; text-align: right;">{{ $barra['texto'] }}</td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
     @if ($filas->isEmpty())
         <p class="empty">No hay registros para el período seleccionado.</p>
     @else

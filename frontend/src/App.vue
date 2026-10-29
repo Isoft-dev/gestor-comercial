@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppDialog from './components/AppDialog.vue'
 import { esEntregaCierre, moduloEnEntrega } from './config/entrega'
 import { pageLoading } from './lib/pageLoading'
+import { prefetchModules } from './lib/prefetch'
 import { useAuthStore } from './stores/auth'
 import {
   Award,
@@ -30,7 +31,7 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const menuOpen = ref(false)
-const collapsed = ref(window.innerWidth <= 1179 && window.innerWidth > 767)
+const collapsed = ref(false)
 
 const groups = computed(() => {
   const links = [
@@ -62,14 +63,21 @@ watch(() => route.fullPath, () => {
 })
 
 function onResize() {
-  if (window.innerWidth <= 767) collapsed.value = false
+  if (window.innerWidth <= 1179) {
+    collapsed.value = false
+    return
+  }
+  menuOpen.value = false
 }
 
-onMounted(() => window.addEventListener('resize', onResize))
+onMounted(() => {
+  window.addEventListener('resize', onResize)
+  if (auth.isAuthenticated) prefetchModules()
+})
 onUnmounted(() => window.removeEventListener('resize', onResize))
 
 function toggleCollapse() {
-  if (window.innerWidth <= 767) {
+  if (window.innerWidth <= 1179) {
     menuOpen.value = !menuOpen.value
     return
   }
@@ -135,23 +143,35 @@ async function signOut() {
       </div>
     </aside>
     <main class="content">
-      <Suspense>
-        <RouterView />
-        <template #fallback>
-          <div class="page-loading" role="status">
-            <span class="spinner" aria-hidden="true"></span>
-            <p>Cargando…</p>
+      <RouterView v-slot="{ Component, route: current }">
+        <Transition name="page" mode="out-in">
+          <div :key="current.path" class="page-stage">
+            <Suspense>
+              <component :is="Component" />
+              <template #fallback>
+                <div class="page-loading" role="status">
+                  <span class="spinner" aria-hidden="true"></span>
+                  <p>Cargando…</p>
+                </div>
+              </template>
+            </Suspense>
           </div>
-        </template>
-      </Suspense>
+        </Transition>
+      </RouterView>
       <div v-if="pageLoading" class="page-loading" role="status" aria-live="polite">
         <span class="spinner" aria-hidden="true"></span>
         <p>Cargando datos…</p>
       </div>
     </main>
   </div>
-  <Suspense v-else>
-    <RouterView />
-    <template #fallback><p class="muted">Cargando…</p></template>
-  </Suspense>
+  <RouterView v-else v-slot="{ Component, route: current }">
+    <Transition name="page" mode="out-in">
+      <div :key="current.path" class="page-stage">
+        <Suspense>
+          <component :is="Component" />
+          <template #fallback><p class="muted">Cargando…</p></template>
+        </Suspense>
+      </div>
+    </Transition>
+  </RouterView>
 </template>

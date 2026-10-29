@@ -59,7 +59,7 @@ export const useAuthStore = defineStore('auth', () => {
     lastFresh.value = Date.now()
   }
 
-  async function ensureFreshProfile(maxAge = 20000) {
+  async function ensureFreshProfile(maxAge = 120000) {
     if (!token.value) return
     if (Date.now() - lastFresh.value < maxAge) return
     await refreshProfile()

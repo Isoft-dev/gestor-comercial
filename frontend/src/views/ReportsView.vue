@@ -15,6 +15,7 @@ const filters = reactive({
   categoria_id: '',
   proveedor_id: '',
 })
+const incluirGrafica = ref(false)
 const error = ref('')
 const preview = ref(null)
 const opening = ref(false)
@@ -29,13 +30,8 @@ function chartOptions(currency = false) {
   return {
     ...chartDefaults({ currency }),
     animation: {
-      duration: 1400,
+      duration: 350,
       easing: 'easeOutQuart',
-      delay: (context) => (
-        context.type === 'data' && context.mode === 'default'
-          ? context.dataIndex * 65
-          : 0
-      ),
     },
   }
 }
@@ -63,6 +59,7 @@ function queryParams() {
     estado_pago: filters.estado_pago || undefined,
     categoria_id: filters.categoria_id || undefined,
     proveedor_id: filters.proveedor_id || undefined,
+    grafica: incluirGrafica.value ? 1 : undefined,
   }
 }
 
@@ -219,6 +216,10 @@ onUnmounted(() => {
     <button class="button primary" :disabled="loading"><Filter :size="16" /> {{ loading ? 'Cargando…' : 'Aplicar' }}</button>
   </form>
   <p class="muted">El período aplica a ventas, productos y compras. El estado de pago filtra las ventas. La categoría filtra productos e inventario. El proveedor filtra las compras. El inventario bajo no depende de las fechas.</p>
+  <label class="check-line">
+    <input v-model="incluirGrafica" type="checkbox" />
+    Incluir gráfica al generar el PDF. Si el archivo tarda, déjela sin marcar: el PDF sale solo con la tabla.
+  </label>
   <p v-if="loading" class="muted" role="status">Cargando reportes y preparando los gráficos…</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
   <template v-if="reports">

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 abstract class ApiController extends Controller
@@ -48,14 +49,26 @@ abstract class ApiController extends Controller
 
     protected function permissionCodesForRole(int $roleId): array
     {
-        return DB::table('TEC_ROL_PERMISO as rp')
-            ->join('TEC_PERMISO as p', 'p.PER_Permiso', '=', 'rp.PER_Permiso')
-            ->where('rp.ROL_Rol', $roleId)
-            ->where('p.PER_Estado', true)
-            ->orderBy('p.PER_Codigo')
-            ->pluck('p.PER_Codigo')
-            ->values()
-            ->all();
+        return Cache::remember($this->rolePermissionCacheKey($roleId), 120, function () use ($roleId) {
+            return DB::table('TEC_ROL_PERMISO as rp')
+                ->join('TEC_PERMISO as p', 'p.PER_Permiso', '=', 'rp.PER_Permiso')
+                ->where('rp.ROL_Rol', $roleId)
+                ->where('p.PER_Estado', true)
+                ->orderBy('p.PER_Codigo')
+                ->pluck('p.PER_Codigo')
+                ->values()
+                ->all();
+        });
+    }
+
+    protected function forgetRolePermissions(int $roleId): void
+    {
+        Cache::forget($this->rolePermissionCacheKey($roleId));
+    }
+
+    private function rolePermissionCacheKey(int $roleId): string
+    {
+        return "tec.rol.permisos.{$roleId}";
     }
 
     protected function attachGrouped(iterable $parents, string $key, string $relation, $grouped): void

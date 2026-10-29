@@ -1,11 +1,11 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../services/api'
 import { permisoEnEntrega } from '../config/entrega'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
-import { CircleAlert, CircleCheck, KeyRound, Pencil, Save, Shield, X } from '@lucide/vue'
+import { CircleAlert, CircleCheck, KeyRound, Pencil, Plus, RefreshCw, Save, Shield, X } from '@lucide/vue'
 import SortHeader from '../components/SortHeader.vue'
 
 const router = useRouter()
@@ -17,6 +17,8 @@ const permissions = ref([])
 const error = ref('')
 const message = ref('')
 const editingId = ref(null)
+const formOpen = ref(false)
+const formPanel = ref(null)
 const search = ref('')
 const statusFilter = ref('todos')
 const sort = ref('id')
@@ -70,8 +72,19 @@ function toggleSort(column) {
 
 function reset() {
   editingId.value = null
+  formOpen.value = false
   form.nombre = ''
   form.permisos = []
+}
+
+function revealForm() {
+  formOpen.value = true
+  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
+}
+
+function openCreate() {
+  reset()
+  revealForm()
 }
 
 function isAdmin(role) {
@@ -126,6 +139,7 @@ function edit(role) {
   form.permisos = permissions.value
     .filter((permission) => role.permisos.includes(permission.PER_Codigo))
     .map((permission) => Number(permission.PER_Permiso))
+  revealForm()
 }
 
 function togglePermission(permission, checked) {
@@ -180,11 +194,14 @@ onMounted(load)
       <p class="eyebrow">Administración</p>
       <h1 class="page-title"><Shield :size="26" :stroke-width="2" /> Roles y permisos</h1>
     </div>
+    <div class="header-actions">
+      <button v-if="auth.can('USUARIOS.GESTIONAR')" class="button primary" type="button" @click="openCreate"><Plus :size="16" /> Nuevo rol</button>
+      <button class="button secondary" type="button" @click="load"><RefreshCw :size="16" /> Actualizar</button>
+    </div>
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <section :class="{ 'two-column': auth.can('USUARIOS.GESTIONAR') }">
-    <form v-if="auth.can('USUARIOS.GESTIONAR')" class="panel" @submit.prevent="submit">
+    <form v-if="auth.can('USUARIOS.GESTIONAR') && formOpen" ref="formPanel" class="panel" @submit.prevent="submit">
       <div class="panel-heading">
         <KeyRound :size="18" />
         <h2>{{ editingId ? 'Modificar rol' : 'Nuevo rol' }}</h2>
@@ -221,7 +238,7 @@ onMounted(load)
       </div>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear rol' }}</button>
-        <button v-if="editingId" class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
+        <button class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
       </div>
     </form>
     <section class="panel">
@@ -270,5 +287,4 @@ onMounted(load)
         </table>
       </div>
     </section>
-  </section>
 </template>

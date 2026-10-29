@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { fields } from '../lib/fields'
+import { prefetchModules } from '../lib/prefetch'
 import { useAuthStore } from '../stores/auth'
 import { CircleAlert, Cpu, LockKeyhole, LogIn, Mail } from '@lucide/vue'
 
@@ -17,6 +18,7 @@ async function submit() {
   error.value = ''
   try {
     await auth.login(correo.value, contrasena.value)
+    prefetchModules()
     router.push(auth.homePath())
   } catch (requestError) {
     error.value = requestError.userMessage

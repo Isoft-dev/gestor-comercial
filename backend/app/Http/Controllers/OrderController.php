@@ -52,7 +52,8 @@ class OrderController extends ApiController
             : DB::table('TEC_DETALLE_PEDIDO as d')
                 ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'd.PRO_Producto')
                 ->whereIn('d.PED_Pedido', $ids)
-                ->select('d.*', 'p.PRO_SKU', 'p.PRO_Nombre')
+                ->leftJoin('TEC_INVENTARIO as i', 'i.PRO_Producto', '=', 'd.PRO_Producto')
+                ->select('d.*', 'p.PRO_SKU', 'p.PRO_Nombre', 'i.INV_Existencia')
                 ->orderBy('p.PRO_Nombre')
                 ->get()
                 ->groupBy('PED_Pedido');

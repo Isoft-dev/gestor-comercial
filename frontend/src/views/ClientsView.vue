@@ -1,10 +1,10 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { nextTick, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
-import { Ban, CircleAlert, CircleCheck, Pencil, Save, Search, UserPlus, Users, X } from '@lucide/vue'
+import { Ban, CircleAlert, CircleCheck, Pencil, Plus, RefreshCw, Save, Search, UserPlus, Users, X } from '@lucide/vue'
 import SortHeader from '../components/SortHeader.vue'
 
 const auth = useAuthStore()
@@ -16,6 +16,8 @@ const direction = ref('asc')
 const message = ref('')
 const error = ref('')
 const editingId = ref(null)
+const formOpen = ref(false)
+const formPanel = ref(null)
 const form = reactive(emptyForm())
 
 function emptyForm() {
@@ -32,7 +34,18 @@ function emptyForm() {
 
 function reset() {
   editingId.value = null
+  formOpen.value = false
   Object.assign(form, emptyForm())
+}
+
+function revealForm() {
+  formOpen.value = true
+  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
+}
+
+function openCreate() {
+  reset()
+  revealForm()
 }
 
 function fullName(item) {
@@ -88,6 +101,7 @@ function edit(item) {
     correo: item.CLI_Correo || '',
     telefono: item.CLI_Telefono || '',
   })
+  revealForm()
 }
 
 async function deactivate(item) {
@@ -141,6 +155,10 @@ function toggleSort(column) {
       <p class="eyebrow">Cartera</p>
       <h1 class="page-title"><Users :size="26" :stroke-width="2" /> Clientes</h1>
     </div>
+    <div class="header-actions">
+      <button v-if="auth.can('CLIENTES.GESTIONAR')" class="button primary" type="button" @click="openCreate"><Plus :size="16" /> Nuevo cliente</button>
+      <button class="button secondary" type="button" @click="load"><RefreshCw :size="16" /> Actualizar</button>
+    </div>
   </header>
   <form class="filter-bar" @submit.prevent="load">
     <label>Buscar
@@ -157,8 +175,7 @@ function toggleSort(column) {
   </form>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <section :class="{ 'two-column': auth.can('CLIENTES.GESTIONAR') }">
-    <form v-if="auth.can('CLIENTES.GESTIONAR')" class="panel" @submit.prevent="submit">
+    <form v-if="auth.can('CLIENTES.GESTIONAR') && formOpen" ref="formPanel" class="panel" @submit.prevent="submit">
       <div class="panel-heading">
         <UserPlus :size="18" />
         <h2>{{ editingId ? 'Modificar cliente' : 'Nuevo cliente' }}</h2>
@@ -174,7 +191,7 @@ function toggleSort(column) {
       </div>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear cliente' }}</button>
-        <button v-if="editingId" class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
+        <button class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
       </div>
     </form>
     <section class="panel">
@@ -212,5 +229,4 @@ function toggleSort(column) {
         </table>
       </div>
     </section>
-  </section>
 </template>

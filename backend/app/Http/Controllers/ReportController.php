@@ -61,6 +61,7 @@ class ReportController extends ApiController
         $criteria = $this->criteria($request);
         $payload = $this->reportPayload($criteria);
         $report = $this->pdfDefinition($tipo, $payload);
+        $grafica = $request->boolean('grafica') ? $this->chartRows($tipo, $payload) : [];
 
         $options = new Options;
         $options->set('isRemoteEnabled', false);
@@ -73,6 +74,7 @@ class ReportController extends ApiController
             'generado_en' => $payload['generado_en'],
             'columnas' => $report['columnas'],
             'filas' => $report['filas'],
+            'grafica' => $grafica,
         ])->render());
         $dompdf->setPaper('letter', 'portrait');
         $dompdf->render();
@@ -247,6 +249,41 @@ class ReportController extends ApiController
                 ]),
             ],
         };
+    }
+
+    private function chartRows(string $tipo, array $payload): array
+    {
+        $rows = match ($tipo) {
+            'ventas' => collect($payload['ventas_por_fecha'])->map(fn ($row) => [
+                'etiqueta' => (string) $row->fecha,
+                'valor' => (float) $row->total,
+                'texto' => 'Q '.number_format((float) $row->total, 2),
+            ]),
+            'productos' => collect($payload['productos_mas_vendidos'])->map(fn ($row) => [
+                'etiqueta' => (string) $row->PRO_Nombre,
+                'valor' => (float) $row->cantidad,
+                'texto' => (string) $row->cantidad,
+            ]),
+            'inventario' => collect($payload['inventario_bajo'])->map(fn ($row) => [
+                'etiqueta' => (string) $row->PRO_Nombre,
+                'valor' => (float) $row->INV_Existencia,
+                'texto' => (string) $row->INV_Existencia,
+            ]),
+            'compras' => collect($payload['compras_por_proveedor'])->map(fn ($row) => [
+                'etiqueta' => (string) $row->proveedor,
+                'valor' => (float) $row->total,
+                'texto' => 'Q '.number_format((float) $row->total, 2),
+            ]),
+            default => collect(),
+        };
+
+        $max = max(1, (float) $rows->max('valor'));
+
+        return $rows->map(function (array $row) use ($max) {
+            $row['ancho'] = max(2, (int) round(($row['valor'] / $max) * 100));
+
+            return $row;
+        })->all();
     }
 
     private function periodBounds(string $from, string $to): array

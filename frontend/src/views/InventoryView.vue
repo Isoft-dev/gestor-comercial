@@ -1,8 +1,8 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import api from '../services/api'
 import { useAuthStore } from '../stores/auth'
-import { CircleAlert, CircleCheck, RefreshCw, Search, SlidersHorizontal, TriangleAlert, Warehouse } from '@lucide/vue'
+import { CircleAlert, CircleCheck, RefreshCw, Search, SlidersHorizontal, TriangleAlert, Warehouse, X } from '@lucide/vue'
 import SortHeader from '../components/SortHeader.vue'
 
 const auth = useAuthStore()
@@ -16,6 +16,8 @@ const stockFilters = reactive({ buscar: '', categoria_id: '', stock: 'todos' })
 const stockPage = ref(1)
 const stockPagination = ref({ current_page: 1, last_page: 1, total: 0 })
 const adjustment = reactive({ producto_id: '', tipo: 'AJUSTE_ENTRADA', cantidad: 1, motivo: '' })
+const formOpen = ref(false)
+const formPanel = ref(null)
 const sort = ref('id')
 const direction = ref('asc')
 const productQuery = ref('')
@@ -34,29 +36,38 @@ const filteredProductOptions = computed(() => {
   )
 })
 
-async function load() {
+async function load(full = true) {
+  const complete = full !== false || !categories.value.length
   try {
-    const { data } = await api.get('/inventario', {
-      params: {
-        completo: 1,
-        page: stockPage.value,
-        por_pagina: 20,
-        buscar: stockFilters.buscar || undefined,
-        categoria_id: stockFilters.categoria_id || undefined,
-        stock: stockFilters.stock,
-        orden: sort.value,
-        direccion: direction.value,
-      },
-    })
-    stock.value = data.stock.data
-    categories.value = data.categorias
-    stockPagination.value = {
-      current_page: data.stock.current_page,
-      last_page: data.stock.last_page,
-      total: data.stock.total,
+    const params = {
+      page: stockPage.value,
+      por_pagina: 20,
+      buscar: stockFilters.buscar || undefined,
+      categoria_id: stockFilters.categoria_id || undefined,
+      stock: stockFilters.stock,
+      orden: sort.value,
+      direccion: direction.value,
     }
-    movements.value = data.movimientos.data
-    alerts.value = data.alertas
+    if (complete) params.completo = 1
+    const { data } = await api.get('/inventario', { params })
+    if (complete) {
+      stock.value = data.stock.data
+      categories.value = data.categorias
+      stockPagination.value = {
+        current_page: data.stock.current_page,
+        last_page: data.stock.last_page,
+        total: data.stock.total,
+      }
+      movements.value = data.movimientos.data
+      alerts.value = data.alertas
+      return
+    }
+    stock.value = data.data
+    stockPagination.value = {
+      current_page: data.current_page,
+      last_page: data.last_page,
+      total: data.total,
+    }
   } catch (requestError) {
     error.value = requestError.userMessage
   }
@@ -64,12 +75,12 @@ async function load() {
 
 function searchStock() {
   stockPage.value = 1
-  load()
+  load(false)
 }
 
 function changeStockPage(page) {
   stockPage.value = page
-  load()
+  load(false)
 }
 
 function syncAdjustmentProduct() {
@@ -156,11 +167,27 @@ async function submitAdjustment() {
     error.value = ''
     await api.post('/inventario/ajustes', adjustment)
     message.value = 'Movimiento registrado.'
-    adjustment.motivo = ''
+    closeAdjustment()
     await load()
   } catch (requestError) {
     error.value = requestError.userMessage
   }
+}
+
+function closeAdjustment() {
+  formOpen.value = false
+  adjustment.producto_id = ''
+  adjustment.tipo = 'AJUSTE_ENTRADA'
+  adjustment.cantidad = 1
+  adjustment.motivo = ''
+  productQuery.value = ''
+  productDropdownOpen.value = false
+}
+
+function openAdjustment() {
+  closeAdjustment()
+  formOpen.value = true
+  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
 }
 
 onMounted(() => {
@@ -181,7 +208,7 @@ function toggleSort(column) {
     direction.value = 'asc'
   }
   stockPage.value = 1
-  load()
+  load(false)
 }
 </script>
 
@@ -191,9 +218,12 @@ function toggleSort(column) {
       <p class="eyebrow">Existencias trazables</p>
       <h1 class="page-title"><Warehouse :size="26" :stroke-width="2" /> Inventario</h1>
     </div>
-    <button class="button secondary" type="button" @click="load">
-      <RefreshCw :size="16" /> Actualizar
-    </button>
+    <div class="header-actions">
+      <button v-if="auth.can('INVENTARIO.AJUSTAR')" class="button primary" type="button" @click="openAdjustment"><SlidersHorizontal :size="16" /> Nuevo ajuste</button>
+      <button class="button secondary" type="button" @click="load(true)">
+        <RefreshCw :size="16" /> Actualizar
+      </button>
+    </div>
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
@@ -220,7 +250,7 @@ function toggleSort(column) {
       </tbody>
     </table></div>
   </section>
-  <form v-if="auth.can('INVENTARIO.AJUSTAR')" class="panel compact-form" @submit.prevent="submitAdjustment">
+  <form v-if="auth.can('INVENTARIO.AJUSTAR') && formOpen" ref="formPanel" class="panel compact-form" @submit.prevent="submitAdjustment">
     <div class="panel-heading"><SlidersHorizontal :size="18" /><h2>Ajuste supervisado</h2></div>
     <label>Producto
       <div class="product-picker">
@@ -257,7 +287,10 @@ function toggleSort(column) {
     <label>Tipo<select v-model="adjustment.tipo"><option>AJUSTE_ENTRADA</option><option>AJUSTE_SALIDA</option><option>DEVOLUCION</option></select></label>
     <label>Cantidad<input v-model.number="adjustment.cantidad" type="number" min="1" required /></label>
     <label>Motivo<input v-model="adjustment.motivo" required /></label>
-    <button class="button primary"><SlidersHorizontal :size="16" /> Registrar</button>
+    <div class="actions">
+      <button class="button primary" type="submit"><SlidersHorizontal :size="16" /> Registrar</button>
+      <button class="button secondary" type="button" @click="closeAdjustment"><X :size="16" /> Cancelar</button>
+    </div>
   </form>
   <section class="panel">
     <div class="panel-heading"><Warehouse :size="18" /><h2>Existencias actuales</h2></div>

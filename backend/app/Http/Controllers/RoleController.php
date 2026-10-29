@@ -189,6 +189,7 @@ class RoleController extends ApiController
                 'updated_at' => now(),
             ]);
         }
+        $this->forgetRolePermissions($roleId);
     }
 
     private function guardAdminPermissions(string $roleName, array $permissionIds): array

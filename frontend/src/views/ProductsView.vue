@@ -1,11 +1,11 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { nextTick, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
-import { Ban, CircleAlert, CircleCheck, Package, Pencil, Save, Search, X } from '@lucide/vue'
+import { Ban, CircleAlert, CircleCheck, Package, Pencil, Plus, RefreshCw, Save, Search, X } from '@lucide/vue'
 import SortHeader from '../components/SortHeader.vue'
 
 const auth = useAuthStore()
@@ -22,6 +22,8 @@ const direction = ref('asc')
 const message = ref('')
 const error = ref('')
 const editingId = ref(null)
+const formOpen = ref(false)
+const formPanel = ref(null)
 const photo = ref(null)
 const photoPreview = ref('')
 const photoRemoved = ref(false)
@@ -48,12 +50,23 @@ function reset() {
   if (photoObjectUrl) URL.revokeObjectURL(photoObjectUrl)
   photoObjectUrl = null
   editingId.value = null
+  formOpen.value = false
   photo.value = null
   photoPreview.value = ''
   photoRemoved.value = false
   photoValidationError.value = ''
   if (photoInput.value) photoInput.value.value = ''
   Object.assign(form, emptyForm())
+}
+
+function revealForm() {
+  formOpen.value = true
+  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
+}
+
+function openCreate() {
+  reset()
+  revealForm()
 }
 
 function clearPhoto() {
@@ -167,6 +180,7 @@ function edit(item) {
   photo.value = null
   photoRemoved.value = false
   photoPreview.value = item.PRO_Foto_URL || ''
+  revealForm()
 }
 
 async function deactivate(item) {
@@ -221,6 +235,10 @@ function toggleSort(column) {
       <p class="eyebrow">Catálogo</p>
       <h1 class="page-title"><Package :size="26" :stroke-width="2" /> Productos</h1>
     </div>
+    <div class="header-actions">
+      <button v-if="auth.can('CATALOGOS.GESTIONAR')" class="button primary" type="button" @click="openCreate"><Plus :size="16" /> Nuevo producto</button>
+      <button class="button secondary" type="button" @click="load"><RefreshCw :size="16" /> Actualizar</button>
+    </div>
   </header>
   <form class="filter-bar" @submit.prevent="load">
     <label>Buscar
@@ -255,8 +273,7 @@ function toggleSort(column) {
   </form>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <section :class="{ 'two-column': auth.can('CATALOGOS.GESTIONAR') }">
-    <form v-if="auth.can('CATALOGOS.GESTIONAR')" class="panel" @submit.prevent="submit">
+    <form v-if="auth.can('CATALOGOS.GESTIONAR') && formOpen" ref="formPanel" class="panel" @submit.prevent="submit">
       <div class="panel-heading">
         <Package :size="18" />
         <h2>{{ editingId ? 'Modificar producto' : 'Nuevo producto' }}</h2>
@@ -292,7 +309,7 @@ function toggleSort(column) {
       <p v-else class="muted">La existencia inicial es 0. Se actualiza al recibir una compra o con un ajuste de inventario.</p>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear producto' }}</button>
-        <button v-if="editingId" class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
+        <button class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
       </div>
     </form>
     <section class="panel">
@@ -342,5 +359,4 @@ function toggleSort(column) {
         </table>
       </div>
     </section>
-  </section>
 </template>

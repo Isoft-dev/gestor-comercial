@@ -1,9 +1,9 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { formatCurrency } from '../lib/currency'
 import { useAuthStore } from '../stores/auth'
-import { Banknote, CircleAlert, CircleCheck, Eye, Filter, LockKeyhole, Receipt, Wallet, X } from '@lucide/vue'
+import { Banknote, CircleAlert, CircleCheck, Eye, Filter, LockKeyhole, Receipt, RefreshCw, Wallet, X } from '@lucide/vue'
 
 const auth = useAuthStore()
 const sales = ref([])
@@ -12,6 +12,8 @@ const methods = ref([])
 const error = ref('')
 const message = ref('')
 const payment = reactive({ venta_id: '', monto: 0, metodo: 'EFECTIVO', referencia: '' })
+const formOpen = ref(false)
+const formPanel = ref(null)
 const card = reactive({ holder: '', number: '', expiryMonth: '', expiryYear: '', cvv: '' })
 const cardPaymentStatus = ref('')
 const filters = reactive({ buscar: '', estado_pago: '', desde: '', hasta: '' })
@@ -23,7 +25,7 @@ async function load() {
   try {
     const { data } = await api.get('/ventas', {
       params: {
-        con_opciones: 1,
+        con_opciones: methods.value.length ? undefined : 1,
         buscar: filters.buscar || undefined,
         estado_pago: filters.estado_pago || undefined,
         desde: filters.desde || undefined,
@@ -31,7 +33,7 @@ async function load() {
       },
     })
     sales.value = data.data
-    methods.value = data.metodos_pago || []
+    if (data.metodos_pago) methods.value = data.metodos_pago
     if (!methods.value.some((method) => method.MPA_Codigo === payment.metodo)) {
       payment.metodo = methods.value.find((method) => method.MPA_Codigo === 'EFECTIVO')?.MPA_Codigo
         || methods.value[0]?.MPA_Codigo
@@ -98,6 +100,19 @@ function clearDemoCard() {
   card.cvv = ''
 }
 
+function closePayment() {
+  formOpen.value = false
+  payment.venta_id = ''
+  payment.monto = 0
+  payment.referencia = ''
+  clearDemoCard()
+}
+
+function openPayment() {
+  formOpen.value = true
+  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
+}
+
 async function submit() {
   error.value = ''
   message.value = ''
@@ -127,10 +142,7 @@ async function submit() {
       referencia: reference,
     })
     message.value = demoCardPayment ? 'Pago de demostración registrado correctamente.' : 'Pago registrado.'
-    payment.venta_id = ''
-    payment.monto = 0
-    payment.referencia = ''
-    clearDemoCard()
+    closePayment()
     await load()
     if (demoCardPayment) cardPaymentStatus.value = 'success'
   } catch (requestError) {
@@ -154,10 +166,14 @@ onMounted(load)
       <p class="eyebrow">Cobros</p>
       <h1 class="page-title"><Wallet :size="26" :stroke-width="2" /> Ventas y pagos</h1>
     </div>
+    <div class="header-actions">
+      <button v-if="auth.can('PAGOS.REGISTRAR')" class="button primary" type="button" @click="openPayment"><Banknote :size="16" /> Registrar pago</button>
+      <button class="button secondary" type="button" @click="load"><RefreshCw :size="16" /> Actualizar</button>
+    </div>
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <form v-if="auth.can('PAGOS.REGISTRAR')" class="panel compact-form" autocomplete="off" @submit.prevent="submit">
+  <form v-if="auth.can('PAGOS.REGISTRAR') && formOpen" ref="formPanel" class="panel compact-form" autocomplete="off" @submit.prevent="submit">
     <div class="panel-heading"><Banknote :size="18" /><h2>Registrar pago</h2></div>
     <label>Venta<select v-model="payment.venta_id" required @change="selectSale(sales.find((sale) => sale.VEN_Venta == payment.venta_id))"><option value="">Seleccione</option><option v-for="sale in sales.filter((item) => Number(item.VEN_Saldo) > 0)" :key="sale.VEN_Venta" :value="sale.VEN_Venta">#{{ sale.VEN_Venta }} · Saldo {{ formatCurrency(sale.VEN_Saldo) }}</option></select></label>
     <label>Monto (Q)<input v-model.number="payment.monto" type="number" min="0.01" step="0.01" required /></label>
@@ -227,7 +243,10 @@ onMounted(load)
         />
       </label>
     </template>
-    <button class="button primary" type="submit" :disabled="cardPaymentStatus === 'processing' || methods.length === 0"><Banknote :size="16" /> Registrar</button>
+    <div class="actions">
+      <button class="button primary" type="submit" :disabled="cardPaymentStatus === 'processing' || methods.length === 0"><Banknote :size="16" /> Registrar</button>
+      <button class="button secondary" type="button" @click="closePayment"><X :size="16" /> Cancelar</button>
+    </div>
   </form>
   <Teleport to="body">
     <div v-if="cardPaymentStatus" class="dialog-backdrop" role="presentation">

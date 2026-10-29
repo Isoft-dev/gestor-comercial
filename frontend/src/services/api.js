@@ -9,6 +9,11 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('techstore_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+  if ((config.method || 'get').toLowerCase() === 'get') {
+    config.headers['Cache-Control'] = 'no-cache'
+    config.headers.Pragma = 'no-cache'
+    config.params = { ...(config.params || {}), _: Date.now() }
+  }
   return trackPageRequest(config)
 })
 
