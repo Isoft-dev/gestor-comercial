@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askPrompt } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
@@ -14,7 +14,6 @@ const error = ref('')
 const message = ref('')
 const form = reactive({ cliente_id: '', producto_id: '', cantidad: 1, descuento_porcentaje: 0 })
 const formOpen = ref(false)
-const formPanel = ref(null)
 const clientQuery = ref('')
 const productQuery = ref('')
 const clientDropdownOpen = ref(false)
@@ -170,7 +169,6 @@ function closeForm() {
 function openCreate() {
   clearOrderForm()
   formOpen.value = true
-  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
 }
 
 async function submit() {
@@ -259,7 +257,9 @@ onBeforeUnmount(() => {
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <form v-if="auth.can('PEDIDOS.REGISTRAR') && formOpen" ref="formPanel" class="panel" @submit.prevent="submit">
+  <div v-if="auth.can('PEDIDOS.REGISTRAR')" class="form-slot" :class="{ open: formOpen }">
+  <div class="form-slot-inner">
+  <form class="panel" :inert="!formOpen" @submit.prevent="submit">
       <div class="panel-heading"><Plus :size="18" /><h2>Nuevo pedido</h2></div>
       <label>Cliente
         <div class="order-picker">
@@ -340,6 +340,8 @@ onBeforeUnmount(() => {
         <button class="button secondary" type="button" @click="closeForm"><X :size="16" /> Cancelar</button>
       </div>
     </form>
+  </div>
+  </div>
     <section class="panel">
       <div class="panel-heading"><ClipboardList :size="18" /><h2>Pedidos</h2></div>
       <form class="filter-bar" @submit.prevent="load">

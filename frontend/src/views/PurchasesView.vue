@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
@@ -26,7 +26,6 @@ const incidents = ref([])
 const resolution = reactive({ id: '', gestion: 'DEVOLUCION', resolucion: '', monto_credito: '' })
 const form = reactive({ proveedor_id: '', producto_id: '', cantidad: 1, costo_unitario: 1, observacion: '' })
 const formOpen = ref(false)
-const formPanel = ref(null)
 const providerQuery = ref('')
 const providerDropdownOpen = ref(false)
 const productQuery = ref('')
@@ -198,7 +197,6 @@ function closeForm() {
 function openCreate() {
   closeForm()
   formOpen.value = true
-  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
 }
 
 async function submit() {
@@ -364,7 +362,9 @@ onBeforeUnmount(() => {
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <form v-if="formOpen" ref="formPanel" class="panel" @submit.prevent="submit">
+  <div class="form-slot" :class="{ open: formOpen }">
+  <div class="form-slot-inner">
+  <form class="panel" :inert="!formOpen" @submit.prevent="submit">
       <div class="panel-heading"><Plus :size="18" /><h2>Nueva orden</h2></div>
       <label>Proveedor
         <div class="order-picker">
@@ -437,6 +437,8 @@ onBeforeUnmount(() => {
         <button class="button secondary" type="button" @click="closeForm"><X :size="16" /> Cancelar</button>
       </div>
     </form>
+  </div>
+  </div>
     <section class="panel">
       <div class="panel-heading"><PackageCheck :size="18" /><h2>Órdenes recientes</h2></div>
       <form class="filter-bar" @submit.prevent="load">

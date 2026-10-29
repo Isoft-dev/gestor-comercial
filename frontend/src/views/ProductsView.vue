@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
@@ -23,7 +23,6 @@ const message = ref('')
 const error = ref('')
 const editingId = ref(null)
 const formOpen = ref(false)
-const formPanel = ref(null)
 const photo = ref(null)
 const photoPreview = ref('')
 const photoRemoved = ref(false)
@@ -61,7 +60,6 @@ function reset() {
 
 function revealForm() {
   formOpen.value = true
-  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
 }
 
 function openCreate() {
@@ -273,7 +271,9 @@ function toggleSort(column) {
   </form>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-    <form v-if="auth.can('CATALOGOS.GESTIONAR') && formOpen" ref="formPanel" class="panel" @submit.prevent="submit">
+    <div v-if="auth.can('CATALOGOS.GESTIONAR')" class="form-slot" :class="{ open: formOpen }">
+    <div class="form-slot-inner">
+    <form class="panel" :inert="!formOpen" @submit.prevent="submit">
       <div class="panel-heading">
         <Package :size="18" />
         <h2>{{ editingId ? 'Modificar producto' : 'Nuevo producto' }}</h2>
@@ -312,6 +312,8 @@ function toggleSort(column) {
         <button class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
       </div>
     </form>
+    </div>
+    </div>
     <section class="panel">
       <div class="panel-heading"><Package :size="18" /><h2>Productos registrados</h2></div>
       <div class="table-wrap">

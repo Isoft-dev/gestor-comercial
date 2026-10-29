@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../services/api'
 import { permisoEnEntrega } from '../config/entrega'
@@ -18,7 +18,6 @@ const error = ref('')
 const message = ref('')
 const editingId = ref(null)
 const formOpen = ref(false)
-const formPanel = ref(null)
 const search = ref('')
 const statusFilter = ref('todos')
 const sort = ref('id')
@@ -79,7 +78,6 @@ function reset() {
 
 function revealForm() {
   formOpen.value = true
-  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
 }
 
 function openCreate() {
@@ -201,7 +199,9 @@ onMounted(load)
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-    <form v-if="auth.can('USUARIOS.GESTIONAR') && formOpen" ref="formPanel" class="panel" @submit.prevent="submit">
+    <div v-if="auth.can('USUARIOS.GESTIONAR')" class="form-slot" :class="{ open: formOpen }">
+    <div class="form-slot-inner">
+    <form class="panel" :inert="!formOpen" @submit.prevent="submit">
       <div class="panel-heading">
         <KeyRound :size="18" />
         <h2>{{ editingId ? 'Modificar rol' : 'Nuevo rol' }}</h2>
@@ -241,6 +241,8 @@ onMounted(load)
         <button class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
       </div>
     </form>
+    </div>
+    </div>
     <section class="panel">
       <div class="panel-heading"><Shield :size="18" /><h2>Roles del sistema</h2></div>
       <form class="filter-bar" @submit.prevent>

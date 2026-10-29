@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import api from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { CircleAlert, CircleCheck, RefreshCw, Search, SlidersHorizontal, TriangleAlert, Warehouse, X } from '@lucide/vue'
@@ -17,7 +17,6 @@ const stockPage = ref(1)
 const stockPagination = ref({ current_page: 1, last_page: 1, total: 0 })
 const adjustment = reactive({ producto_id: '', tipo: 'AJUSTE_ENTRADA', cantidad: 1, motivo: '' })
 const formOpen = ref(false)
-const formPanel = ref(null)
 const sort = ref('id')
 const direction = ref('asc')
 const productQuery = ref('')
@@ -187,7 +186,6 @@ function closeAdjustment() {
 function openAdjustment() {
   closeAdjustment()
   formOpen.value = true
-  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
 }
 
 onMounted(() => {
@@ -250,7 +248,9 @@ function toggleSort(column) {
       </tbody>
     </table></div>
   </section>
-  <form v-if="auth.can('INVENTARIO.AJUSTAR') && formOpen" ref="formPanel" class="panel compact-form" @submit.prevent="submitAdjustment">
+  <div v-if="auth.can('INVENTARIO.AJUSTAR')" class="form-slot" :class="{ open: formOpen }">
+  <div class="form-slot-inner">
+  <form class="panel compact-form" :inert="!formOpen" @submit.prevent="submitAdjustment">
     <div class="panel-heading"><SlidersHorizontal :size="18" /><h2>Ajuste supervisado</h2></div>
     <label>Producto
       <div class="product-picker">
@@ -292,6 +292,8 @@ function toggleSort(column) {
       <button class="button secondary" type="button" @click="closeAdjustment"><X :size="16" /> Cancelar</button>
     </div>
   </form>
+  </div>
+  </div>
   <section class="panel">
     <div class="panel-heading"><Warehouse :size="18" /><h2>Existencias actuales</h2></div>
     <form class="filter-bar" @submit.prevent="searchStock">

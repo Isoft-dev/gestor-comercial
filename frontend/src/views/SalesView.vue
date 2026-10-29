@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { formatCurrency } from '../lib/currency'
 import { useAuthStore } from '../stores/auth'
@@ -13,7 +13,6 @@ const error = ref('')
 const message = ref('')
 const payment = reactive({ venta_id: '', monto: 0, metodo: 'EFECTIVO', referencia: '' })
 const formOpen = ref(false)
-const formPanel = ref(null)
 const card = reactive({ holder: '', number: '', expiryMonth: '', expiryYear: '', cvv: '' })
 const cardPaymentStatus = ref('')
 const filters = reactive({ buscar: '', estado_pago: '', desde: '', hasta: '' })
@@ -110,7 +109,6 @@ function closePayment() {
 
 function openPayment() {
   formOpen.value = true
-  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
 }
 
 async function submit() {
@@ -173,7 +171,9 @@ onMounted(load)
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-  <form v-if="auth.can('PAGOS.REGISTRAR') && formOpen" ref="formPanel" class="panel compact-form" autocomplete="off" @submit.prevent="submit">
+  <div v-if="auth.can('PAGOS.REGISTRAR')" class="form-slot" :class="{ open: formOpen }">
+  <div class="form-slot-inner">
+  <form class="panel compact-form" :inert="!formOpen" autocomplete="off" @submit.prevent="submit">
     <div class="panel-heading"><Banknote :size="18" /><h2>Registrar pago</h2></div>
     <label>Venta<select v-model="payment.venta_id" required @change="selectSale(sales.find((sale) => sale.VEN_Venta == payment.venta_id))"><option value="">Seleccione</option><option v-for="sale in sales.filter((item) => Number(item.VEN_Saldo) > 0)" :key="sale.VEN_Venta" :value="sale.VEN_Venta">#{{ sale.VEN_Venta }} · Saldo {{ formatCurrency(sale.VEN_Saldo) }}</option></select></label>
     <label>Monto (Q)<input v-model.number="payment.monto" type="number" min="0.01" step="0.01" required /></label>
@@ -248,6 +248,8 @@ onMounted(load)
       <button class="button secondary" type="button" @click="closePayment"><X :size="16" /> Cancelar</button>
     </div>
   </form>
+  </div>
+  </div>
   <Teleport to="body">
     <div v-if="cardPaymentStatus" class="dialog-backdrop" role="presentation">
       <section class="dialog-card demo-payment-dialog" role="dialog" aria-modal="true" aria-live="polite">

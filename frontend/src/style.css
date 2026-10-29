@@ -189,6 +189,17 @@ p { margin: 0; }
 .page-stage { min-width: 0; }
 .page-enter-active { transition: opacity .2s ease, transform .2s ease; }
 .page-enter-from { opacity: 0; transform: translateY(8px); }
+.form-slot {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows .32s ease, opacity .24s ease;
+}
+.form-slot.open { grid-template-rows: 1fr; opacity: 1; }
+.form-slot-inner { min-height: 0; overflow: hidden; transition: overflow 0s linear; }
+.form-slot.open .form-slot-inner { overflow: visible; transition: overflow 0s linear .32s; }
+.form-slot .panel { margin-top: 0; margin-bottom: 0; }
+.form-slot.open .panel { margin-bottom: 20px; }
 .page-loading {
   position: fixed;
   z-index: 8;
@@ -223,6 +234,8 @@ p { margin: 0; }
   .tabs button,
   .home-action,
   .page-enter-active,
+  .form-slot,
+  .form-slot-inner,
   input, select, textarea,
   tbody tr { transition: none; }
   .page-enter-from,

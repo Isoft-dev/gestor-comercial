@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
@@ -16,7 +16,6 @@ const message = ref('')
 const error = ref('')
 const editingId = ref(null)
 const formOpen = ref(false)
-const formPanel = ref(null)
 const search = ref('')
 const statusFilter = ref('todos')
 const page = ref(1)
@@ -71,7 +70,6 @@ function reset() {
 
 function revealForm() {
   formOpen.value = true
-  nextTick(() => formPanel.value?.scrollIntoView({ block: 'start' }))
 }
 
 function openCreate() {
@@ -225,7 +223,9 @@ watch(type, () => {
   </header>
   <p v-if="message" class="alert success"><CircleCheck :size="16" /> {{ message }}</p>
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
-    <form v-if="auth.can('CATALOGOS.GESTIONAR') && formOpen" ref="formPanel" class="panel" @submit.prevent="submit">
+    <div v-if="auth.can('CATALOGOS.GESTIONAR')" class="form-slot" :class="{ open: formOpen }">
+    <div class="form-slot-inner">
+    <form class="panel" :inert="!formOpen" @submit.prevent="submit">
       <div class="panel-heading"><Save :size="18" /><h2>{{ editingId ? 'Modificar registro' : 'Nuevo registro' }}</h2></div>
       <div class="form-grid">
         <label v-for="[name, label, inputType, kind] in fields" :key="name">
@@ -246,6 +246,8 @@ watch(type, () => {
         <button class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
       </div>
     </form>
+    </div>
+    </div>
     <section class="panel">
       <div class="panel-heading"><Layers :size="18" /><h2>Registros</h2></div>
       <form class="filter-bar" @submit.prevent="searchRecords">
