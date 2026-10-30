@@ -233,7 +233,7 @@ onMounted(load)
   <p v-if="error" class="alert error"><CircleAlert :size="16" /> {{ error }}</p>
   <div v-if="auth.can('PAGOS.REGISTRAR')" class="form-slot" :class="{ open: formOpen }">
   <div class="form-slot-inner">
-  <form class="panel compact-form" :inert="!formOpen" autocomplete="off" @submit.prevent="submit">
+  <form class="panel compact-form payment-form" :inert="!formOpen" autocomplete="off" @submit.prevent="submit">
     <div class="panel-heading"><Banknote :size="18" /><h2>Registrar pago</h2></div>
     <label>Venta<select v-model="payment.venta_id" required @change="selectSale(sales.find((sale) => sale.VEN_Venta == payment.venta_id))"><option value="">Seleccione</option><option v-for="sale in sales.filter((item) => Number(item.VEN_Saldo) > 0)" :key="sale.VEN_Venta" :value="sale.VEN_Venta">#{{ sale.VEN_Venta }} · Saldo {{ formatCurrency(sale.VEN_Saldo) }}</option></select></label>
     <label>Monto (Q)<input v-model.number="payment.monto" type="number" min="0.01" :max="selectedBalance || undefined" step="0.01" required :title="selectedBalance ? `Máximo ${formatCurrency(selectedBalance)}` : ''" @input="limitAmount" />
@@ -385,7 +385,7 @@ onMounted(load)
             <td class="mono">{{ formatCurrency(sale.VEN_Pagado) }}</td>
             <td class="mono">{{ formatCurrency(sale.VEN_Saldo) }}</td>
             <td><span class="status" :data-state="sale.VEN_Estado_Pago">{{ sale.VEN_Estado_Pago }}</span></td>
-            <td class="actions">
+            <td class="actions sale-row-actions">
               <button class="link" type="button" @click="selectedSale = sale"><Eye :size="14" /> Ver Detalle</button>
               <button v-if="sale.FAC_Factura" class="link" type="button" @click="invoice(sale.VEN_Venta)"><Receipt :size="14" /> Factura PDF</button>
             </td>

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
@@ -21,10 +21,19 @@ const receiptTo = ref('')
 const receiptPage = ref(1)
 const receiptPagination = ref({ current_page: 1, last_page: 1, total: 0 })
 const selectedReceipt = ref(null)
+const receiptDetailPanel = ref(null)
 const inspection = ref(null)
+const inspectionPanel = ref(null)
 const incidents = ref([])
 const resolution = reactive({ id: '', gestion: 'DEVOLUCION', resolucion: '', monto_credito: '' })
-const form = reactive({ proveedor_id: '', producto_id: '', cantidad: 1, costo_unitario: 1, observacion: '' })
+const form = reactive({
+  proveedor_id: '',
+  producto_id: '',
+  cantidad: 1,
+  costo_unitario: '',
+  observacion: '',
+  detalles: [],
+})
 const formOpen = ref(false)
 const providerQuery = ref('')
 const providerDropdownOpen = ref(false)
@@ -50,12 +59,18 @@ const filteredProviders = computed(() => {
 })
 const filteredProducts = computed(() => {
   const query = productQuery.value.trim().toLocaleLowerCase()
-  if (!query) return products.value
+  const addedProductIds = new Set(form.detalles.map((detail) => String(detail.producto_id)))
+  const availableProducts = products.value.filter((product) => !addedProductIds.has(String(product.PRO_Producto)))
+  if (!query) return availableProducts
 
-  return products.value.filter((product) =>
+  return availableProducts.filter((product) =>
     `${product.PRO_SKU} ${product.PRO_Nombre}`.toLocaleLowerCase().includes(query),
   )
 })
+const purchaseTotal = computed(() => form.detalles.reduce(
+  (total, detail) => total + (Number(detail.cantidad) || 0) * (Number(detail.costo_unitario) || 0),
+  0,
+))
 const gestiones = [
   { codigo: 'DEVOLUCION', nombre: 'Devolución al proveedor' },
   { codigo: 'GARANTIA', nombre: 'Garantía' },
@@ -168,7 +183,43 @@ function selectProvider(provider) {
 function selectProduct(product) {
   productQuery.value = `${product.PRO_SKU} · ${product.PRO_Nombre}`
   form.producto_id = product.PRO_Producto
+  form.costo_unitario = product.PRO_Costo
   productDropdownOpen.value = false
+}
+
+function addPurchaseProduct() {
+  const product = products.value.find((item) => String(item.PRO_Producto) === String(form.producto_id))
+  const quantity = Number(form.cantidad)
+  const unitCost = Number(form.costo_unitario)
+
+  if (!product) {
+    error.value = 'Seleccione un producto de las sugerencias.'
+    return
+  }
+  if (form.detalles.some((detail) => String(detail.producto_id) === String(product.PRO_Producto))) {
+    error.value = 'Ese producto ya está agregado a la orden.'
+    return
+  }
+  if (!Number.isInteger(quantity) || quantity < 1 || !Number.isFinite(unitCost) || unitCost <= 0) {
+    error.value = 'Ingrese una cantidad entera y un costo unitario mayor que cero.'
+    return
+  }
+
+  error.value = ''
+  form.detalles.push({
+    producto_id: product.PRO_Producto,
+    sku: product.PRO_SKU,
+    nombre: product.PRO_Nombre,
+    cantidad: quantity,
+    costo_unitario: unitCost,
+  })
+  clearProduct()
+  form.cantidad = 1
+  form.costo_unitario = ''
+}
+
+function removePurchaseProduct(productId) {
+  form.detalles = form.detalles.filter((detail) => String(detail.producto_id) !== String(productId))
 }
 
 function clearProvider() {
@@ -188,6 +239,8 @@ async function viewReceipt(id) {
   try {
     const { data } = await api.get(`/recepciones/${id}`)
     selectedReceipt.value = data
+    await nextTick()
+    receiptDetailPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   } catch (requestError) {
     error.value = requestError.userMessage
   }
@@ -199,8 +252,9 @@ function clearPurchaseForm() {
   form.proveedor_id = ''
   form.producto_id = ''
   form.cantidad = 1
-  form.costo_unitario = 1
+  form.costo_unitario = ''
   form.observacion = ''
+  form.detalles = []
   providerQuery.value = ''
   productQuery.value = ''
   providerDropdownOpen.value = false
@@ -220,8 +274,21 @@ function openCreate() {
 }
 
 async function submit() {
-  if (!form.proveedor_id || !form.producto_id) {
-    error.value = 'Seleccione un proveedor y un producto de las sugerencias.'
+  if (!form.proveedor_id) {
+    error.value = 'Seleccione un proveedor de las sugerencias.'
+    return
+  }
+  if (form.detalles.length === 0) {
+    error.value = 'Agregue al menos un producto a la orden.'
+    return
+  }
+  if (form.detalles.some((detail) =>
+    !Number.isInteger(Number(detail.cantidad)) ||
+    Number(detail.cantidad) < 1 ||
+    !Number.isFinite(Number(detail.costo_unitario)) ||
+    Number(detail.costo_unitario) <= 0,
+  )) {
+    error.value = 'Revise las cantidades y costos unitarios de los productos agregados.'
     return
   }
 
@@ -230,7 +297,11 @@ async function submit() {
     await api.post('/compras', {
       proveedor_id: form.proveedor_id,
       observacion: form.observacion,
-      detalles: [{ producto_id: form.producto_id, cantidad: form.cantidad, costo_unitario: form.costo_unitario }],
+      detalles: form.detalles.map(({ producto_id, cantidad, costo_unitario }) => ({
+        producto_id,
+        cantidad: Number(cantidad),
+        costo_unitario: Number(costo_unitario),
+      })),
     })
     message.value = 'Orden de compra registrada.'
     closeForm()
@@ -240,7 +311,7 @@ async function submit() {
   }
 }
 
-function openReceive(purchase) {
+async function openReceive(purchase) {
   error.value = ''
   message.value = ''
   inspection.value = {
@@ -263,6 +334,8 @@ function openReceive(purchase) {
         foto: null,
       })),
   }
+  await nextTick()
+  inspectionPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function lineGap(line) {
@@ -427,51 +500,80 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </label>
-      <label>Producto
-        <div class="order-picker">
-          <input
-            :value="productQuery"
-            autocomplete="off"
-            placeholder="Escriba SKU o nombre del producto"
-            required
-            role="combobox"
-            aria-controls="purchase-product-options"
-            :aria-expanded="productDropdownOpen"
-            @input="updateProductQuery($event.target.value)"
-            @focus="openProductOptions"
-            @blur="productBlurTimeout = setTimeout(() => { productDropdownOpen = false }, 150)"
-            @keydown.escape="productDropdownOpen = false"
-          />
-          <button
-            v-if="form.producto_id"
-            class="order-picker-clear"
-            type="button"
-            aria-label="Limpiar producto seleccionado"
-            title="Cambiar producto"
-            @mousedown.prevent
-            @click="clearProduct"
-          ><X :size="16" /></button>
-          <div v-if="productDropdownOpen" id="purchase-product-options" class="product-options" role="listbox">
-            <p v-if="filteredProducts.length === 0" class="product-option-empty">No hay productos que coincidan.</p>
-            <button
-              v-for="product in filteredProducts"
-              :key="product.PRO_Producto"
-              class="product-option"
-              type="button"
-              role="option"
-              :aria-selected="form.producto_id === product.PRO_Producto"
-              @mousedown.prevent
-              @click="selectProduct(product)"
-            >
-              <span class="mono">{{ product.PRO_SKU }}</span> · {{ product.PRO_Nombre }}
-            </button>
+      <section class="purchase-items-editor" aria-labelledby="purchase-items-title">
+        <div class="purchase-items-heading">
+          <div>
+            <h3 id="purchase-items-title">Productos de la orden</h3>
+            <p class="muted">Agregue uno o varios productos del proveedor seleccionado.</p>
           </div>
+          <span class="purchase-items-count">{{ form.detalles.length }} {{ form.detalles.length === 1 ? 'producto' : 'productos' }}</span>
         </div>
-      </label>
-      <div class="form-grid"><label>Cantidad<input v-model.number="form.cantidad" type="number" min="1" required /></label><label>Costo unitario (Q)<input v-model.number="form.costo_unitario" type="number" min="0.01" step="0.01" required /></label></div>
+        <div class="purchase-item-composer">
+          <label class="purchase-product-field">Producto
+            <div class="order-picker">
+              <input
+                :value="productQuery"
+                autocomplete="off"
+                placeholder="Buscar por SKU o nombre"
+                role="combobox"
+                aria-controls="purchase-product-options"
+                :aria-expanded="productDropdownOpen"
+                @input="updateProductQuery($event.target.value)"
+                @focus="openProductOptions"
+                @blur="productBlurTimeout = setTimeout(() => { productDropdownOpen = false }, 150)"
+                @keydown.escape="productDropdownOpen = false"
+              />
+              <button
+                v-if="form.producto_id"
+                class="order-picker-clear"
+                type="button"
+                aria-label="Limpiar producto seleccionado"
+                title="Cambiar producto"
+                @mousedown.prevent
+                @click="clearProduct"
+              ><X :size="16" /></button>
+              <div v-if="productDropdownOpen" id="purchase-product-options" class="product-options" role="listbox">
+                <p v-if="filteredProducts.length === 0" class="product-option-empty">No hay productos disponibles que coincidan.</p>
+                <button
+                  v-for="product in filteredProducts"
+                  :key="product.PRO_Producto"
+                  class="product-option"
+                  type="button"
+                  role="option"
+                  :aria-selected="form.producto_id === product.PRO_Producto"
+                  @mousedown.prevent
+                  @click="selectProduct(product)"
+                >
+                  <span class="mono">{{ product.PRO_SKU }}</span> · {{ product.PRO_Nombre }}
+                </button>
+              </div>
+            </div>
+          </label>
+          <label>Cantidad<input v-model.number="form.cantidad" type="number" min="1" step="1" /></label>
+          <label>Costo unitario (Q)<input v-model.number="form.costo_unitario" type="number" min="0.01" step="0.01" placeholder="0.00" /></label>
+          <button class="button secondary purchase-add-button" type="button" @click="addPurchaseProduct"><Plus :size="16" /> Agregar</button>
+        </div>
+        <div v-if="form.detalles.length" class="table-wrap purchase-items-table-wrap">
+          <table class="purchase-items-table">
+            <thead><tr><th>SKU</th><th>Producto</th><th>Cantidad</th><th>Costo unitario</th><th>Subtotal</th><th aria-label="Acciones"></th></tr></thead>
+            <tbody>
+              <tr v-for="detail in form.detalles" :key="detail.producto_id">
+                <td class="mono">{{ detail.sku }}</td>
+                <td>{{ detail.nombre }}</td>
+                <td><input v-model.number="detail.cantidad" type="number" min="1" step="1" :aria-label="`Cantidad de ${detail.nombre}`" /></td>
+                <td><input v-model.number="detail.costo_unitario" type="number" min="0.01" step="0.01" :aria-label="`Costo unitario de ${detail.nombre}`" /></td>
+                <td class="mono">{{ formatCurrency((Number(detail.cantidad) || 0) * (Number(detail.costo_unitario) || 0)) }}</td>
+                <td><button class="icon-button purchase-remove-button" type="button" :aria-label="`Quitar ${detail.nombre}`" :title="`Quitar ${detail.nombre}`" @click="removePurchaseProduct(detail.producto_id)"><X :size="16" /></button></td>
+              </tr>
+            </tbody>
+            <tfoot><tr><th colspan="4">Total de la orden</th><th class="mono">{{ formatCurrency(purchaseTotal) }}</th><th></th></tr></tfoot>
+          </table>
+        </div>
+        <p v-else class="purchase-items-empty">Aún no hay productos. Seleccione uno arriba para agregarlo a esta orden.</p>
+      </section>
       <label>Observación<textarea v-model="form.observacion"></textarea></label>
       <div class="actions">
-        <button class="button primary" type="submit"><Plus :size="16" /> Registrar compra</button>
+        <button class="button primary" type="submit" :disabled="form.detalles.length === 0"><Plus :size="16" /> Registrar orden</button>
         <button class="button secondary" type="button" @click="clearPurchaseForm"><Eraser :size="16" /> Limpiar</button>
         <button class="button secondary" type="button" @click="closeForm"><X :size="16" /> Cancelar</button>
       </div>
@@ -526,13 +628,13 @@ onBeforeUnmount(() => {
         </tbody>
       </table></div>
     </section>
-  <section v-if="inspection" class="panel">
-    <div class="panel-heading">
-      <div><PackageCheck :size="18" /><h2>Inspección de la compra #{{ inspection.id }}</h2></div>
+  <section v-if="inspection" ref="inspectionPanel" class="panel inspection-panel">
+    <div class="panel-heading inspection-heading">
+      <div class="inspection-title"><PackageCheck :size="20" /><h2>Inspección de la compra #{{ inspection.id }}</h2></div>
       <button class="button secondary" type="button" @click="inspection = null">Dejar pendiente</button>
     </div>
-    <p class="muted">{{ inspection.proveedor }}. Solo las unidades buenas aumentan el inventario. Las dañadas quedan como incidencia y las faltantes siguen pendientes. Si el proveedor exige devolver todo el pedido, use Dejar pendiente: no se confirma el ingreso.</p>
-    <div class="table-wrap"><table class="inspect-table">
+    <p class="inspection-summary">{{ inspection.proveedor }}. Solo las unidades buenas aumentan el inventario. Las dañadas quedan como incidencia y las faltantes siguen pendientes. Si el proveedor exige devolver todo el pedido, use Dejar pendiente: no se confirma el ingreso.</p>
+    <div class="table-wrap inspection-table-wrap"><table class="inspect-table">
       <thead><tr><th>Producto</th><th>Comprada</th><th>Pendiente</th><th>Buenas</th><th>Dañadas</th><th>Faltantes</th><th>Motivo y foto</th></tr></thead>
       <tbody>
         <tr v-for="line in inspection.lineas" :key="line.producto_id">
@@ -553,9 +655,13 @@ onBeforeUnmount(() => {
         </tr>
       </tbody>
     </table></div>
-    <label class="check-line"><input v-model="inspection.loteIndivisible" type="checkbox" /> El proveedor no permite dividir el lote. Si hay dañadas o faltantes, no se confirma la recepción.</label>
-    <label>Observación<textarea v-model="inspection.observacion"></textarea></label>
-    <button class="button primary" type="button" @click="confirmReceive"><PackageCheck :size="16" /> Confirmar recepción</button>
+    <div class="inspection-options">
+      <label class="check-line"><input v-model="inspection.loteIndivisible" type="checkbox" /> El proveedor no permite dividir el lote. Si hay dañadas o faltantes, no se confirma la recepción.</label>
+      <label>Observación<textarea v-model="inspection.observacion"></textarea></label>
+    </div>
+    <div class="inspection-actions">
+      <button class="button primary" type="button" @click="confirmReceive"><PackageCheck :size="16" /> Confirmar recepción</button>
+    </div>
   </section>
   <section v-if="incidents.length" class="panel">
     <div class="panel-heading"><CircleAlert :size="18" /><h2>Incidencias pendientes</h2></div>
@@ -616,8 +722,8 @@ onBeforeUnmount(() => {
       <button class="button secondary" type="button" :disabled="receiptPage >= receiptPagination.last_page" @click="changeReceiptPage(receiptPage + 1)">Siguiente</button>
     </div>
   </section>
-  <section v-if="selectedReceipt" class="panel">
-    <div class="panel-heading">
+  <section v-if="selectedReceipt" ref="receiptDetailPanel" class="panel receipt-detail-panel">
+    <div class="panel-heading receipt-detail-heading">
       <div><PackageCheck :size="18" /><h2>Detalle de recepción #{{ selectedReceipt.REC_Recepcion }}</h2></div>
       <button class="icon-button" type="button" aria-label="Cerrar detalle" @click="selectedReceipt = null"><X :size="18" /></button>
     </div>
@@ -629,7 +735,7 @@ onBeforeUnmount(() => {
       <p><strong>Fecha de recepción:</strong> {{ selectedReceipt.REC_Fecha }}</p>
       <p><strong>Observación:</strong> {{ selectedReceipt.REC_Observacion || '—' }}</p>
     </div>
-    <div class="table-wrap"><table>
+    <div class="table-wrap receipt-items-table"><table>
       <thead><tr><th>SKU</th><th>Producto</th><th>Buenas</th><th>Dañadas</th><th>Faltantes</th><th>Costo unitario</th><th>Subtotal</th></tr></thead>
       <tbody>
         <tr v-for="detail in selectedReceipt.detalles" :key="detail.DCO_Detalle_Compra">
