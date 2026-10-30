@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import api from '../services/api'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
-import { CircleAlert, CircleCheck, Pencil, Plus, RefreshCw, Save, UserPlus, Users, X } from '@lucide/vue'
+import { CircleAlert, CircleCheck, Eraser, Pencil, Plus, RefreshCw, Save, UserPlus, Users, X } from '@lucide/vue'
 import SortHeader from '../components/SortHeader.vue'
 
 const router = useRouter()
@@ -18,7 +18,7 @@ const formOpen = ref(false)
 const search = ref('')
 const statusFilter = ref('todos')
 const sort = ref('id')
-const direction = ref('asc')
+const direction = ref('desc')
 const form = reactive(emptyForm())
 
 function emptyForm() {
@@ -60,7 +60,7 @@ const visibleUsers = computed(() => {
     const b = value(right)
     if (a < b) return -1 * factor
     if (a > b) return 1 * factor
-    return left.id - right.id
+    return right.id - left.id
   })
 })
 
@@ -84,6 +84,13 @@ function revealForm() {
 
 function openCreate() {
   reset()
+  revealForm()
+}
+
+function clearUserForm() {
+  reset()
+  error.value = ''
+  message.value = ''
   revealForm()
 }
 
@@ -209,6 +216,7 @@ onMounted(load)
           <UserPlus v-else :size="16" />
           {{ editingId ? 'Guardar cambios' : 'Crear usuario' }}
         </button>
+        <button v-if="!editingId" class="button secondary" type="button" @click="clearUserForm"><Eraser :size="16" /> Limpiar</button>
         <button class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
       </div>
     </form>

@@ -21,7 +21,7 @@ const formOpen = ref(false)
 const search = ref('')
 const statusFilter = ref('todos')
 const sort = ref('id')
-const direction = ref('asc')
+const direction = ref('desc')
 const form = reactive({
   nombre: '',
   permisos: [],
@@ -57,7 +57,7 @@ const visibleRoles = computed(() => {
     const b = value(right)
     if (a < b) return -1 * factor
     if (a > b) return 1 * factor
-    return left.ROL_Rol - right.ROL_Rol
+    return right.ROL_Rol - left.ROL_Rol
   })
 })
 

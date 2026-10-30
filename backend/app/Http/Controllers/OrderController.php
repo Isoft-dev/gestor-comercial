@@ -45,7 +45,7 @@ class OrderController extends ApiController
             });
         }
 
-        $orders = $query->orderByDesc('p.PED_Fecha')->paginate(20);
+        $orders = $query->orderByDesc('p.PED_Fecha')->orderByDesc('p.PED_Pedido')->paginate(20);
         $ids = collect($orders->items())->pluck('PED_Pedido');
         $details = $ids->isEmpty()
             ? collect()
@@ -152,7 +152,12 @@ class OrderController extends ApiController
 
         $this->audit($request, 'PEDIDOS', 'CREAR', $id, ['total' => $total]);
 
-        return response()->json(['id' => $id, 'total' => $total, 'message' => 'Pedido creado.'], 201);
+        $message = "Pedido #{$id} registrado correctamente.";
+        if ($percentage > self::DISCOUNT_LIMIT) {
+            $message .= ' El descuento supera 10 % y requerirá aprobación.';
+        }
+
+        return response()->json(['id' => $id, 'total' => $total, 'message' => $message], 201);
     }
 
     public function advance(Request $request, int $id): JsonResponse

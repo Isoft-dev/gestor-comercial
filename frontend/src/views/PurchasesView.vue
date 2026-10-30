@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
-import { CircleAlert, CircleCheck, Eye, PackageCheck, Plus, RefreshCw, Search, Truck, X } from '@lucide/vue'
+import { CircleAlert, CircleCheck, Eraser, Eye, PackageCheck, Plus, RefreshCw, Search, Truck, X } from '@lucide/vue'
 import SortHeader from '../components/SortHeader.vue'
 
 const purchases = ref([])
@@ -14,7 +14,7 @@ const error = ref('')
 const message = ref('')
 const purchaseStatus = ref('')
 const sort = ref('id')
-const direction = ref('asc')
+const direction = ref('desc')
 const receiptSearch = ref('')
 const receiptFrom = ref('')
 const receiptTo = ref('')
@@ -171,6 +171,18 @@ function selectProduct(product) {
   productDropdownOpen.value = false
 }
 
+function clearProvider() {
+  providerQuery.value = ''
+  form.proveedor_id = ''
+  openProviderOptions()
+}
+
+function clearProduct() {
+  productQuery.value = ''
+  form.producto_id = ''
+  openProductOptions()
+}
+
 async function viewReceipt(id) {
   error.value = ''
   try {
@@ -181,8 +193,9 @@ async function viewReceipt(id) {
   }
 }
 
-function closeForm() {
-  formOpen.value = false
+function clearPurchaseForm() {
+  error.value = ''
+  message.value = ''
   form.proveedor_id = ''
   form.producto_id = ''
   form.cantidad = 1
@@ -194,8 +207,15 @@ function closeForm() {
   productDropdownOpen.value = false
 }
 
+function closeForm() {
+  formOpen.value = false
+  clearPurchaseForm()
+}
+
 function openCreate() {
   closeForm()
+  error.value = ''
+  message.value = ''
   formOpen.value = true
 }
 
@@ -381,6 +401,15 @@ onBeforeUnmount(() => {
             @blur="providerBlurTimeout = setTimeout(() => { providerDropdownOpen = false }, 150)"
             @keydown.escape="providerDropdownOpen = false"
           />
+          <button
+            v-if="form.proveedor_id"
+            class="order-picker-clear"
+            type="button"
+            aria-label="Limpiar proveedor seleccionado"
+            title="Cambiar proveedor"
+            @mousedown.prevent
+            @click="clearProvider"
+          ><X :size="16" /></button>
           <div v-if="providerDropdownOpen" id="purchase-provider-options" class="product-options" role="listbox">
             <p v-if="filteredProviders.length === 0" class="product-option-empty">No hay proveedores que coincidan.</p>
             <button
@@ -413,6 +442,15 @@ onBeforeUnmount(() => {
             @blur="productBlurTimeout = setTimeout(() => { productDropdownOpen = false }, 150)"
             @keydown.escape="productDropdownOpen = false"
           />
+          <button
+            v-if="form.producto_id"
+            class="order-picker-clear"
+            type="button"
+            aria-label="Limpiar producto seleccionado"
+            title="Cambiar producto"
+            @mousedown.prevent
+            @click="clearProduct"
+          ><X :size="16" /></button>
           <div v-if="productDropdownOpen" id="purchase-product-options" class="product-options" role="listbox">
             <p v-if="filteredProducts.length === 0" class="product-option-empty">No hay productos que coincidan.</p>
             <button
@@ -434,6 +472,7 @@ onBeforeUnmount(() => {
       <label>Observación<textarea v-model="form.observacion"></textarea></label>
       <div class="actions">
         <button class="button primary" type="submit"><Plus :size="16" /> Registrar compra</button>
+        <button class="button secondary" type="button" @click="clearPurchaseForm"><Eraser :size="16" /> Limpiar</button>
         <button class="button secondary" type="button" @click="closeForm"><X :size="16" /> Cancelar</button>
       </div>
     </form>

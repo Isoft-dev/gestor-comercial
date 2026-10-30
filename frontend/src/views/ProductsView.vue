@@ -5,7 +5,7 @@ import { askConfirm } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
-import { Ban, CircleAlert, CircleCheck, Package, Pencil, Plus, RefreshCw, Save, Search, X } from '@lucide/vue'
+import { Ban, CircleAlert, CircleCheck, Eraser, Package, Pencil, Plus, RefreshCw, Save, Search, X } from '@lucide/vue'
 import SortHeader from '../components/SortHeader.vue'
 
 const auth = useAuthStore()
@@ -18,7 +18,7 @@ const brandId = ref('')
 const statusFilter = ref('todos')
 const stockFilter = ref('todos')
 const sort = ref('id')
-const direction = ref('asc')
+const direction = ref('desc')
 const message = ref('')
 const error = ref('')
 const editingId = ref(null)
@@ -64,6 +64,12 @@ function revealForm() {
 
 function openCreate() {
   reset()
+  revealForm()
+}
+
+function clearForm() {
+  reset()
+  error.value = ''
   revealForm()
 }
 
@@ -309,6 +315,7 @@ function toggleSort(column) {
       <p v-else class="muted">La existencia inicial es 0. Se actualiza al recibir una compra o con un ajuste de inventario.</p>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear producto' }}</button>
+        <button v-if="!editingId" class="button secondary" type="button" @click="clearForm"><Eraser :size="16" /> Limpiar</button>
         <button class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
       </div>
     </form>
@@ -344,7 +351,7 @@ function toggleSort(column) {
               <td class="mono">{{ formatCurrency(item.PRO_Precio) }}</td>
               <td>{{ item.INV_Existencia }} / mín. {{ item.PRO_Existencia_Minima }}</td>
               <td><span class="status" :class="{ off: !item.PRO_Estado }">{{ item.PRO_Estado ? 'Activo' : 'Inactivo' }}</span></td>
-              <td class="actions">
+              <td><div class="actions">
                 <button v-if="auth.can('CATALOGOS.GESTIONAR')" class="link" type="button" @click="edit(item)"><Pencil :size="14" /> Editar</button>
                 <button v-if="item.PRO_Estado && auth.can(['CATALOGOS.INACTIVAR', 'CATALOGOS.GESTIONAR'])" class="link danger" type="button" @click="deactivate(item)">
                   <Ban :size="14" /> Inactivar
@@ -352,7 +359,7 @@ function toggleSort(column) {
                 <button v-else-if="!item.PRO_Estado && auth.can(['CATALOGOS.INACTIVAR', 'CATALOGOS.GESTIONAR'])" class="link" type="button" @click="activate(item)">
                   <CircleCheck :size="14" /> Activar
                 </button>
-              </td>
+              </div></td>
             </tr>
             <tr v-if="items.length === 0">
               <td colspan="9">No hay productos que coincidan con el filtro.</td>

@@ -212,18 +212,18 @@ class CatalogController extends ApiController
         $sorts = self::SORTS[$type];
         $orden = (string) request()->query('orden', 'id');
         $column = $sorts[$orden] ?? $sorts['id'];
-        $direction = request()->query('direccion') === 'desc' ? 'desc' : 'asc';
+        $direction = request()->query('direccion', 'desc') === 'asc' ? 'asc' : 'desc';
 
         if ($type === 'productos' && $orden === 'clasificacion') {
             return $query
                 ->orderBy('TEC_CATEGORIA.CAT_Nombre', $direction)
                 ->orderBy('TEC_MARCA.MAR_Nombre', $direction)
-                ->orderBy('TEC_PRODUCTO.PRO_Producto');
+                ->orderBy('TEC_PRODUCTO.PRO_Producto', 'desc');
         }
 
         $ordered = $query->orderBy($column, $direction);
         if ($orden !== 'id') {
-            $ordered->orderBy($sorts['id']);
+            $ordered->orderBy($sorts['id'], 'desc');
         }
 
         return $ordered;
@@ -376,7 +376,7 @@ class CatalogController extends ApiController
                 'u.USU_Bloqueado_Hasta as bloqueado_hasta',
                 'r.ROL_Nombre as rol',
             )
-            ->orderBy('u.USU_Usuario')
+            ->orderByDesc('u.USU_Usuario')
             ->get();
 
         if (! $request->boolean('con_roles')) {

@@ -36,7 +36,7 @@ class AuditController extends ApiController
             $query->whereDate('a.AUD_Fecha', '<=', $request->query('hasta'));
         }
 
-        $page = $query->orderByDesc('a.AUD_Fecha')->paginate(30);
+        $page = $query->orderByDesc('a.AUD_Fecha')->orderByDesc('a.AUD_Auditoria')->paginate(30);
         $payload = $page->toArray();
         $payload['catalogos'] = [
             'modulos' => DB::table('TEC_AUDITORIA')

@@ -53,7 +53,7 @@ class InventoryController extends ApiController
             'categorias' => DB::table('TEC_CATEGORIA')
                 ->orderBy('CAT_Nombre')
                 ->get(['CAT_Categoria', 'CAT_Nombre']),
-            'movimientos' => $this->movementQuery($request)->orderByDesc('m.MOV_Fecha')->paginate(30),
+            'movimientos' => $this->movementQuery($request)->orderByDesc('m.MOV_Fecha')->orderByDesc('m.MOV_Movimiento_Inventario')->paginate(30),
             'alertas' => $this->activeAlerts(),
         ]);
     }
@@ -62,7 +62,7 @@ class InventoryController extends ApiController
     {
         $this->requireAnyPermission($request, ['INVENTARIO.AJUSTAR', 'COMPRAS.REGISTRAR', 'REPORTES.CONSULTAR']);
 
-        return response()->json($this->movementQuery($request)->orderByDesc('m.MOV_Fecha')->paginate(30));
+        return response()->json($this->movementQuery($request)->orderByDesc('m.MOV_Fecha')->orderByDesc('m.MOV_Movimiento_Inventario')->paginate(30));
     }
 
     public function alerts(Request $request): JsonResponse
@@ -84,10 +84,10 @@ class InventoryController extends ApiController
         ];
         $orden = (string) $request->query('orden', 'id');
         $column = $sorts[$orden] ?? $sorts['id'];
-        $direction = $request->query('direccion') === 'desc' ? 'desc' : 'asc';
+        $direction = $request->query('direccion', 'desc') === 'asc' ? 'asc' : 'desc';
         $query->orderBy($column, $direction);
         if ($orden !== 'id') {
-            $query->orderBy('p.PRO_Producto');
+            $query->orderBy('p.PRO_Producto', 'desc');
         }
 
         return $query;
@@ -131,7 +131,8 @@ class InventoryController extends ApiController
             ->join('TEC_INVENTARIO as i', 'i.PRO_Producto', '=', 'p.PRO_Producto')
             ->where('a.ALE_Estado', 'ACTIVA')
             ->select('a.*', 'p.PRO_SKU', 'p.PRO_Nombre', 'i.INV_Existencia', 'p.PRO_Existencia_Minima')
-            ->orderBy('p.PRO_Producto')
+            ->orderByDesc('a.ALE_Fecha_Generacion')
+            ->orderByDesc('a.ALE_Alerta')
             ->get();
     }
 

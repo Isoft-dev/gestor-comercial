@@ -71,7 +71,7 @@ class SaleController extends ApiController
             });
         }
 
-        $sales = $query->orderByDesc('v.VEN_Fecha')->paginate(20);
+        $sales = $query->orderByDesc('v.VEN_Fecha')->orderByDesc('v.VEN_Venta')->paginate(20);
         $ids = collect($sales->items())->pluck('VEN_Venta');
         $payments = $ids->isEmpty()
             ? collect()

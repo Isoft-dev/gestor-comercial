@@ -285,7 +285,7 @@ class PurchaseController extends ApiController
             $query->where('i.INC_Estado', $request->query('estado'));
         }
 
-        $page = $query->orderByDesc('i.INC_Fecha')->paginate(20);
+        $page = $query->orderByDesc('i.INC_Fecha')->orderByDesc('i.INC_Incidencia')->paginate(20);
         $base = rtrim($request->getSchemeAndHttpHost(), '/').'/storage/';
         foreach ($page->items() as $item) {
             $item->INC_Foto_URL = $item->INC_Foto ? $base.ltrim($item->INC_Foto, '/') : null;
@@ -393,7 +393,7 @@ class PurchaseController extends ApiController
             $query->where('r.REC_Fecha', '<=', $filters['hasta'].' 23:59:59');
         }
 
-        return response()->json($query->orderByDesc('r.REC_Fecha')->paginate(20));
+        return response()->json($query->orderByDesc('r.REC_Fecha')->orderByDesc('r.REC_Recepcion')->paginate(20));
     }
 
     public function receipt(Request $request, int $id): JsonResponse
@@ -611,10 +611,10 @@ class PurchaseController extends ApiController
         ];
         $orden = (string) $request->query('orden', 'id');
         $column = $sorts[$orden] ?? $sorts['id'];
-        $direction = $request->query('direccion') === 'desc' ? 'desc' : 'asc';
+        $direction = $request->query('direccion', 'desc') === 'asc' ? 'asc' : 'desc';
         $query->orderBy($column, $direction);
         if ($orden !== 'id') {
-            $query->orderBy('c.COM_Compra');
+            $query->orderBy('c.COM_Compra', 'desc');
         }
 
         return $query;

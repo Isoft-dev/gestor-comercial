@@ -74,14 +74,16 @@ class TechStoreFlowTest extends TestCase
             'INV_Existencia' => 10,
         ]);
 
-        $orderId = $this->postJson('/api/pedidos', [
+        $orderResponse = $this->postJson('/api/pedidos', [
             'cliente_id' => $client,
             'descuento_porcentaje' => 5,
             'detalles' => [[
                 'producto_id' => $product,
                 'cantidad' => 2,
             ]],
-        ])->assertCreated()->json('id');
+        ])->assertCreated();
+        $orderId = $orderResponse->json('id');
+        $this->assertSame("Pedido #{$orderId} registrado correctamente.", $orderResponse->json('message'));
 
         $this->postJson("/api/pedidos/{$orderId}/avanzar")
             ->assertOk()
@@ -670,7 +672,7 @@ class TechStoreFlowTest extends TestCase
         $this->assertDatabaseMissing('TEC_PRODUCTO', ['PRO_SKU' => 'TEC-PHOTO-LARGE']);
     }
 
-    public function test_product_catalog_defaults_to_id_order_and_filters_by_category(): void
+    public function test_product_catalog_defaults_to_newest_first_and_filters_by_category(): void
     {
         $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
         $this->actingAs($admin, 'sanctum');
@@ -700,7 +702,7 @@ class TechStoreFlowTest extends TestCase
         $ids = collect($this->getJson('/api/catalogos/productos?por_pagina=100')->assertOk()->json('data'))
             ->pluck('PRO_Producto')
             ->all();
-        $this->assertLessThan(array_search($second, $ids, true), array_search($first, $ids, true));
+        $this->assertLessThan(array_search($first, $ids, true), array_search($second, $ids, true));
 
         $names = collect($this->getJson('/api/catalogos/productos?orden=nombre&direccion=desc&por_pagina=100')->assertOk()->json('data'))
             ->pluck('PRO_Nombre')
@@ -893,6 +895,41 @@ class TechStoreFlowTest extends TestCase
         ->assertJsonPath('COM_Compra', $purchaseId)
         ->assertJsonPath('detalles.0.PRO_SKU', $sku)
         ->assertJsonPath('detalles.0.DCO_Cantidad', 4);
+    }
+
+    public function test_recent_purchases_are_listed_newest_first_by_default(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $provider = DB::table('TEC_PROVEEDOR')->value('PRV_Proveedor');
+        $product = DB::table('TEC_PRODUCTO')->value('PRO_Producto');
+
+        $firstId = $this->postJson('/api/compras', [
+            'proveedor_id' => $provider,
+            'detalles' => [[
+                'producto_id' => $product,
+                'cantidad' => 1,
+                'costo_unitario' => 10,
+            ]],
+        ])->assertCreated()->json('id');
+        $secondId = $this->postJson('/api/compras', [
+            'proveedor_id' => $provider,
+            'detalles' => [[
+                'producto_id' => $product,
+                'cantidad' => 2,
+                'costo_unitario' => 10,
+            ]],
+        ])->assertCreated()->json('id');
+
+        $this->getJson('/api/compras')
+            ->assertOk()
+            ->assertJsonPath('data.0.COM_Compra', $secondId)
+            ->assertJsonPath('data.1.COM_Compra', $firstId);
+
+        $this->getJson('/api/compras?orden=id&direccion=asc')
+            ->assertOk()
+            ->assertJsonPath('data.0.COM_Compra', $firstId)
+            ->assertJsonPath('data.1.COM_Compra', $secondId);
     }
 
     public function test_damaged_units_stay_out_of_stock_and_open_an_incident(): void
