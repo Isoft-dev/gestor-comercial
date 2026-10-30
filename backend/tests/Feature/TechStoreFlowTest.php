@@ -932,6 +932,33 @@ class TechStoreFlowTest extends TestCase
             ->assertJsonPath('data.1.COM_Compra', $secondId);
     }
 
+    public function test_a_purchase_can_contain_multiple_products_in_one_order(): void
+    {
+        $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+        $provider = DB::table('TEC_PROVEEDOR')->value('PRV_Proveedor');
+        $products = DB::table('TEC_PRODUCTO')->orderBy('PRO_Producto')->limit(2)->pluck('PRO_Producto');
+
+        $purchaseId = $this->postJson('/api/compras', [
+            'proveedor_id' => $provider,
+            'detalles' => [
+                ['producto_id' => $products[0], 'cantidad' => 2, 'costo_unitario' => 10],
+                ['producto_id' => $products[1], 'cantidad' => 3, 'costo_unitario' => 4],
+            ],
+        ])->assertCreated()->json('id');
+
+        $this->assertDatabaseCount('TEC_DETALLE_COMPRA', 2);
+        $this->assertDatabaseHas('TEC_COMPRA', [
+            'COM_Compra' => $purchaseId,
+            'PRV_Proveedor' => $provider,
+            'COM_Total' => 32,
+        ]);
+        $this->getJson('/api/compras')
+            ->assertOk()
+            ->assertJsonPath('data.0.COM_Compra', $purchaseId)
+            ->assertJsonCount(2, 'data.0.detalles');
+    }
+
     public function test_damaged_units_stay_out_of_stock_and_open_an_incident(): void
     {
         $admin = User::where('USU_Correo', 'admin@techstore.test')->firstOrFail();
