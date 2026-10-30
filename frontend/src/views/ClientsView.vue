@@ -4,7 +4,7 @@ import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { fields } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
-import { Ban, CircleAlert, CircleCheck, Pencil, Plus, RefreshCw, Save, Search, UserPlus, Users, X } from '@lucide/vue'
+import { Ban, CircleAlert, CircleCheck, Eraser, Pencil, Plus, RefreshCw, Save, Search, UserPlus, Users, X } from '@lucide/vue'
 import SortHeader from '../components/SortHeader.vue'
 
 const auth = useAuthStore()
@@ -46,6 +46,13 @@ function revealForm() {
 
 function openCreate() {
   reset()
+  revealForm()
+}
+
+function clearClientForm() {
+  reset()
+  error.value = ''
+  message.value = ''
   revealForm()
 }
 
@@ -200,6 +207,7 @@ function toggleSort(column) {
       </div>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear cliente' }}</button>
+        <button v-if="!editingId" class="button secondary" type="button" @click="clearClientForm"><Eraser :size="16" /> Limpiar</button>
         <button class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
       </div>
     </form>

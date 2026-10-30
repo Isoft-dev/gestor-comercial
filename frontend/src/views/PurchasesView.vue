@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
@@ -21,7 +21,9 @@ const receiptTo = ref('')
 const receiptPage = ref(1)
 const receiptPagination = ref({ current_page: 1, last_page: 1, total: 0 })
 const selectedReceipt = ref(null)
+const receiptDetailPanel = ref(null)
 const inspection = ref(null)
+const inspectionPanel = ref(null)
 const incidents = ref([])
 const resolution = reactive({ id: '', gestion: 'DEVOLUCION', resolucion: '', monto_credito: '' })
 const form = reactive({ proveedor_id: '', producto_id: '', cantidad: 1, costo_unitario: 1, observacion: '' })
@@ -188,6 +190,8 @@ async function viewReceipt(id) {
   try {
     const { data } = await api.get(`/recepciones/${id}`)
     selectedReceipt.value = data
+    await nextTick()
+    receiptDetailPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   } catch (requestError) {
     error.value = requestError.userMessage
   }
@@ -240,7 +244,7 @@ async function submit() {
   }
 }
 
-function openReceive(purchase) {
+async function openReceive(purchase) {
   error.value = ''
   message.value = ''
   inspection.value = {
@@ -263,6 +267,8 @@ function openReceive(purchase) {
         foto: null,
       })),
   }
+  await nextTick()
+  inspectionPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function lineGap(line) {
@@ -526,13 +532,13 @@ onBeforeUnmount(() => {
         </tbody>
       </table></div>
     </section>
-  <section v-if="inspection" class="panel">
-    <div class="panel-heading">
-      <div><PackageCheck :size="18" /><h2>Inspección de la compra #{{ inspection.id }}</h2></div>
+  <section v-if="inspection" ref="inspectionPanel" class="panel inspection-panel">
+    <div class="panel-heading inspection-heading">
+      <div class="inspection-title"><PackageCheck :size="20" /><h2>Inspección de la compra #{{ inspection.id }}</h2></div>
       <button class="button secondary" type="button" @click="inspection = null">Dejar pendiente</button>
     </div>
-    <p class="muted">{{ inspection.proveedor }}. Solo las unidades buenas aumentan el inventario. Las dañadas quedan como incidencia y las faltantes siguen pendientes. Si el proveedor exige devolver todo el pedido, use Dejar pendiente: no se confirma el ingreso.</p>
-    <div class="table-wrap"><table class="inspect-table">
+    <p class="inspection-summary">{{ inspection.proveedor }}. Solo las unidades buenas aumentan el inventario. Las dañadas quedan como incidencia y las faltantes siguen pendientes. Si el proveedor exige devolver todo el pedido, use Dejar pendiente: no se confirma el ingreso.</p>
+    <div class="table-wrap inspection-table-wrap"><table class="inspect-table">
       <thead><tr><th>Producto</th><th>Comprada</th><th>Pendiente</th><th>Buenas</th><th>Dañadas</th><th>Faltantes</th><th>Motivo y foto</th></tr></thead>
       <tbody>
         <tr v-for="line in inspection.lineas" :key="line.producto_id">
@@ -553,9 +559,13 @@ onBeforeUnmount(() => {
         </tr>
       </tbody>
     </table></div>
-    <label class="check-line"><input v-model="inspection.loteIndivisible" type="checkbox" /> El proveedor no permite dividir el lote. Si hay dañadas o faltantes, no se confirma la recepción.</label>
-    <label>Observación<textarea v-model="inspection.observacion"></textarea></label>
-    <button class="button primary" type="button" @click="confirmReceive"><PackageCheck :size="16" /> Confirmar recepción</button>
+    <div class="inspection-options">
+      <label class="check-line"><input v-model="inspection.loteIndivisible" type="checkbox" /> El proveedor no permite dividir el lote. Si hay dañadas o faltantes, no se confirma la recepción.</label>
+      <label>Observación<textarea v-model="inspection.observacion"></textarea></label>
+    </div>
+    <div class="inspection-actions">
+      <button class="button primary" type="button" @click="confirmReceive"><PackageCheck :size="16" /> Confirmar recepción</button>
+    </div>
   </section>
   <section v-if="incidents.length" class="panel">
     <div class="panel-heading"><CircleAlert :size="18" /><h2>Incidencias pendientes</h2></div>
@@ -616,8 +626,8 @@ onBeforeUnmount(() => {
       <button class="button secondary" type="button" :disabled="receiptPage >= receiptPagination.last_page" @click="changeReceiptPage(receiptPage + 1)">Siguiente</button>
     </div>
   </section>
-  <section v-if="selectedReceipt" class="panel">
-    <div class="panel-heading">
+  <section v-if="selectedReceipt" ref="receiptDetailPanel" class="panel receipt-detail-panel">
+    <div class="panel-heading receipt-detail-heading">
       <div><PackageCheck :size="18" /><h2>Detalle de recepción #{{ selectedReceipt.REC_Recepcion }}</h2></div>
       <button class="icon-button" type="button" aria-label="Cerrar detalle" @click="selectedReceipt = null"><X :size="18" /></button>
     </div>
@@ -629,7 +639,7 @@ onBeforeUnmount(() => {
       <p><strong>Fecha de recepción:</strong> {{ selectedReceipt.REC_Fecha }}</p>
       <p><strong>Observación:</strong> {{ selectedReceipt.REC_Observacion || '—' }}</p>
     </div>
-    <div class="table-wrap"><table>
+    <div class="table-wrap receipt-items-table"><table>
       <thead><tr><th>SKU</th><th>Producto</th><th>Buenas</th><th>Dañadas</th><th>Faltantes</th><th>Costo unitario</th><th>Subtotal</th></tr></thead>
       <tbody>
         <tr v-for="detail in selectedReceipt.detalles" :key="detail.DCO_Detalle_Compra">
