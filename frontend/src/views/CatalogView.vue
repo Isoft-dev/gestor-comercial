@@ -20,7 +20,7 @@ const search = ref('')
 const statusFilter = ref('todos')
 const page = ref(1)
 const sort = ref('id')
-const direction = ref('asc')
+const direction = ref('desc')
 const pagination = ref({ current_page: 1, last_page: 1, total: 0 })
 const form = reactive({})
 

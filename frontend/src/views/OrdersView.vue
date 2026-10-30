@@ -6,7 +6,7 @@ import { askPrompt } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
 import { clampAmount } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
-import { Ban, Check, CircleAlert, CircleCheck, ClipboardList, Filter, Plus, RefreshCw, ShoppingBag, X } from '@lucide/vue'
+import { Ban, Check, CircleAlert, CircleCheck, ClipboardList, Eye, Filter, Plus, RefreshCw, ShoppingBag, X } from '@lucide/vue'
 
 const auth = useAuthStore()
 const orders = ref([])
@@ -152,6 +152,18 @@ function selectProduct(product) {
   productDropdownOpen.value = false
 }
 
+function clearClient() {
+  clientQuery.value = ''
+  form.cliente_id = ''
+  openClientOptions()
+}
+
+function clearProduct() {
+  productQuery.value = ''
+  form.producto_id = ''
+  openProductOptions()
+}
+
 function lineExceedsStock(detail) {
   return Number(detail.DPE_Cantidad) > Number(detail.INV_Existencia ?? 0)
 }
@@ -198,14 +210,12 @@ async function submit() {
     return
   }
   try {
-    await api.post('/pedidos', {
+    const { data } = await api.post('/pedidos', {
       cliente_id: form.cliente_id,
       descuento_porcentaje: form.descuento_porcentaje,
       detalles: lines.value.map((line) => ({ producto_id: line.PRO_Producto, cantidad: line.cantidad })),
     })
-    message.value = Number(form.descuento_porcentaje) > 10
-      ? 'Pedido creado. El descuento supera 10 % y requerirá aprobación.'
-      : 'Pedido creado.'
+    message.value = data.message
     closeForm()
     await load()
   } catch (requestError) {
@@ -316,6 +326,15 @@ onBeforeUnmount(() => {
             @blur="scheduleClientClose"
             @keydown.escape="clientDropdownOpen = false"
           />
+          <button
+            v-if="form.cliente_id"
+            class="order-picker-clear"
+            type="button"
+            aria-label="Limpiar cliente seleccionado"
+            title="Cambiar cliente"
+            @mousedown.prevent
+            @click="clearClient"
+          ><X :size="16" /></button>
           <div v-if="clientDropdownOpen" id="order-client-options" class="product-options" role="listbox">
             <p v-if="filteredClients.length === 0" class="product-option-empty">No hay clientes que coincidan.</p>
             <button
@@ -347,6 +366,15 @@ onBeforeUnmount(() => {
             @blur="scheduleProductClose"
             @keydown.escape="productDropdownOpen = false"
           />
+          <button
+            v-if="form.producto_id"
+            class="order-picker-clear"
+            type="button"
+            aria-label="Limpiar producto seleccionado"
+            title="Cambiar producto"
+            @mousedown.prevent
+            @click="clearProduct"
+          ><X :size="16" /></button>
           <div v-if="productDropdownOpen" id="order-product-options" class="product-options" role="listbox">
             <p v-if="filteredProducts.length === 0" class="product-option-empty">No hay productos que coincidan.</p>
             <button
@@ -405,9 +433,9 @@ onBeforeUnmount(() => {
         </label>
         <button class="button primary" type="submit"><Filter :size="16" /> Filtrar</button>
       </form>
-      <div class="table-wrap"><table><thead><tr><th>#</th><th>Cliente</th><th>Descuento</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>Cliente</th><th>Descuento</th><th>Total</th><th>Estado</th><th>Acciones</th><th></th></tr></thead>
         <tbody>
-          <tr v-if="orders.length === 0"><td colspan="6">No hay pedidos que coincidan con la búsqueda.</td></tr>
+          <tr v-if="orders.length === 0"><td colspan="7">No hay pedidos que coincidan con la búsqueda.</td></tr>
           <template v-for="order in orders" :key="order.PED_Pedido">
             <tr>
               <td class="mono">{{ order.PED_Pedido }}</td>
@@ -416,7 +444,6 @@ onBeforeUnmount(() => {
               <td class="mono">{{ formatCurrency(order.PED_Total) }}</td>
               <td><span class="status" :data-state="order.PED_Estado">{{ order.PED_Estado }}</span></td>
               <td class="actions">
-                <button class="link" type="button" @click="selectedOrder = order">Ver detalle</button>
                 <button v-if="auth.can('PEDIDOS.REGISTRAR') && order.PED_Estado === 'CREADO'" class="link" type="button" @click="action(`/pedidos/${order.PED_Pedido}/avanzar`)"><Check :size="14" /> Avanzar</button>
                 <template v-if="order.PED_Estado === 'PENDIENTE_APROBACION' && auth.can('PEDIDOS.APROBAR')">
                   <button class="link" type="button" @click="decide(order.PED_Pedido, 'APROBAR')"><Check :size="14" /> Aprobar</button>
@@ -425,9 +452,10 @@ onBeforeUnmount(() => {
                 <button v-if="auth.can('VENTAS.REGISTRAR') && ['APROBADO', 'EN_PROCESO'].includes(order.PED_Estado)" class="link" type="button" :disabled="orderExceedsStock(order)" :title="orderExceedsStock(order) ? 'La cantidad supera la existencia disponible' : ''" @click="action(`/pedidos/${order.PED_Pedido}/vender`)"><ShoppingBag :size="14" /> Vender</button>
                 <button v-if="auth.can('PEDIDOS.REGISTRAR') && !['COMPLETADO', 'CANCELADO'].includes(order.PED_Estado)" class="link danger" type="button" @click="cancel(order.PED_Pedido)"><Ban :size="14" /> Cancelar</button>
               </td>
+              <td><button class="link" type="button" @click="selectedOrder = order"><Eye :size="14" /> Ver Detalle</button></td>
             </tr>
             <tr v-if="order.detalles?.length || order.historial?.length" class="detail-row">
-              <td colspan="6">
+              <td colspan="7">
                 <ul v-if="order.detalles?.length" class="detail-list">
                   <li v-for="detail in order.detalles" :key="detail.DPE_Detalle_Pedido">
                     <span class="mono">{{ detail.PRO_SKU }}</span> {{ detail.PRO_Nombre }}

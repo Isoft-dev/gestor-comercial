@@ -18,7 +18,7 @@ const formOpen = ref(false)
 const search = ref('')
 const statusFilter = ref('todos')
 const sort = ref('id')
-const direction = ref('asc')
+const direction = ref('desc')
 const form = reactive(emptyForm())
 
 function emptyForm() {
@@ -60,7 +60,7 @@ const visibleUsers = computed(() => {
     const b = value(right)
     if (a < b) return -1 * factor
     if (a > b) return 1 * factor
-    return left.id - right.id
+    return right.id - left.id
   })
 })
 
