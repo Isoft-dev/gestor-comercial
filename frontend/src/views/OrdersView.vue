@@ -6,7 +6,7 @@ import { askPrompt } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
 import { clampAmount } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
-import { Ban, Check, CircleAlert, CircleCheck, ClipboardList, Eye, Filter, Plus, RefreshCw, ShoppingBag, X } from '@lucide/vue'
+import { Ban, Check, CircleAlert, CircleCheck, ClipboardList, Eraser, Eye, Filter, Plus, RefreshCw, ShoppingBag, X } from '@lucide/vue'
 
 const auth = useAuthStore()
 const orders = ref([])
@@ -173,6 +173,8 @@ function orderExceedsStock(order) {
 }
 
 function clearOrderForm() {
+  error.value = ''
+  message.value = ''
   lines.value = []
   form.cliente_id = ''
   form.producto_id = ''
@@ -191,6 +193,8 @@ function closeForm() {
 
 function openCreate() {
   clearOrderForm()
+  error.value = ''
+  message.value = ''
   formOpen.value = true
 }
 
@@ -416,6 +420,7 @@ onBeforeUnmount(() => {
       <p v-if="Number(form.descuento_porcentaje) > 10" class="muted">Un descuento mayor a 10 % queda pendiente hasta que un supervisor lo apruebe.</p>
       <div class="actions">
         <button class="button primary" type="submit"><Plus :size="16" /> Crear pedido</button>
+        <button class="button secondary" type="button" @click="clearOrderForm"><Eraser :size="16" /> Limpiar</button>
         <button class="button secondary" type="button" @click="closeForm"><X :size="16" /> Cancelar</button>
       </div>
     </form>
@@ -443,7 +448,7 @@ onBeforeUnmount(() => {
               <td class="mono">{{ Number(order.PED_Descuento_Porcentaje) }}% · {{ formatCurrency(order.PED_Descuento_Monto) }}</td>
               <td class="mono">{{ formatCurrency(order.PED_Total) }}</td>
               <td><span class="status" :data-state="order.PED_Estado">{{ order.PED_Estado }}</span></td>
-              <td class="actions">
+              <td><div class="actions">
                 <button v-if="auth.can('PEDIDOS.REGISTRAR') && order.PED_Estado === 'CREADO'" class="link" type="button" @click="action(`/pedidos/${order.PED_Pedido}/avanzar`)"><Check :size="14" /> Avanzar</button>
                 <template v-if="order.PED_Estado === 'PENDIENTE_APROBACION' && auth.can('PEDIDOS.APROBAR')">
                   <button class="link" type="button" @click="decide(order.PED_Pedido, 'APROBAR')"><Check :size="14" /> Aprobar</button>
@@ -451,7 +456,7 @@ onBeforeUnmount(() => {
                 </template>
                 <button v-if="auth.can('VENTAS.REGISTRAR') && ['APROBADO', 'EN_PROCESO'].includes(order.PED_Estado)" class="link" type="button" :disabled="orderExceedsStock(order)" :title="orderExceedsStock(order) ? 'La cantidad supera la existencia disponible' : ''" @click="action(`/pedidos/${order.PED_Pedido}/vender`)"><ShoppingBag :size="14" /> Vender</button>
                 <button v-if="auth.can('PEDIDOS.REGISTRAR') && !['COMPLETADO', 'CANCELADO'].includes(order.PED_Estado)" class="link danger" type="button" @click="cancel(order.PED_Pedido)"><Ban :size="14" /> Cancelar</button>
-              </td>
+              </div></td>
               <td><button class="link" type="button" @click="selectedOrder = order"><Eye :size="14" /> Ver Detalle</button></td>
             </tr>
             <tr v-if="order.detalles?.length || order.historial?.length" class="detail-row">

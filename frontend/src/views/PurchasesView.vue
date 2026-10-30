@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
-import { CircleAlert, CircleCheck, Eye, PackageCheck, Plus, RefreshCw, Search, Truck, X } from '@lucide/vue'
+import { CircleAlert, CircleCheck, Eraser, Eye, PackageCheck, Plus, RefreshCw, Search, Truck, X } from '@lucide/vue'
 import SortHeader from '../components/SortHeader.vue'
 
 const purchases = ref([])
@@ -193,8 +193,9 @@ async function viewReceipt(id) {
   }
 }
 
-function closeForm() {
-  formOpen.value = false
+function clearPurchaseForm() {
+  error.value = ''
+  message.value = ''
   form.proveedor_id = ''
   form.producto_id = ''
   form.cantidad = 1
@@ -206,8 +207,15 @@ function closeForm() {
   productDropdownOpen.value = false
 }
 
+function closeForm() {
+  formOpen.value = false
+  clearPurchaseForm()
+}
+
 function openCreate() {
   closeForm()
+  error.value = ''
+  message.value = ''
   formOpen.value = true
 }
 
@@ -464,6 +472,7 @@ onBeforeUnmount(() => {
       <label>Observación<textarea v-model="form.observacion"></textarea></label>
       <div class="actions">
         <button class="button primary" type="submit"><Plus :size="16" /> Registrar compra</button>
+        <button class="button secondary" type="button" @click="clearPurchaseForm"><Eraser :size="16" /> Limpiar</button>
         <button class="button secondary" type="button" @click="closeForm"><X :size="16" /> Cancelar</button>
       </div>
     </form>

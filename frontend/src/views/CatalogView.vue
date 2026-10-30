@@ -5,7 +5,7 @@ import api from '../services/api'
 import { askConfirm } from '../lib/dialog'
 import { fields as masks } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
-import { Ban, Building2, CircleAlert, CircleCheck, Layers, Pencil, Plus, RefreshCw, Save, Search, Tags, X } from '@lucide/vue'
+import { Ban, Building2, CircleAlert, CircleCheck, Eraser, Layers, Pencil, Plus, RefreshCw, Save, Search, Tags, X } from '@lucide/vue'
 import SortHeader from '../components/SortHeader.vue'
 
 const route = useRoute()
@@ -74,6 +74,13 @@ function revealForm() {
 
 function openCreate() {
   reset()
+  revealForm()
+}
+
+function clearProviderForm() {
+  reset()
+  error.value = ''
+  message.value = ''
   revealForm()
 }
 
@@ -243,6 +250,7 @@ watch(type, () => {
       </div>
       <div class="actions">
         <button class="button primary"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Guardar' }}</button>
+        <button v-if="type === 'proveedores' && !editingId" class="button secondary" type="button" @click="clearProviderForm"><Eraser :size="16" /> Limpiar</button>
         <button class="button secondary" type="button" @click="reset"><X :size="16" /> Cancelar</button>
       </div>
     </form>
