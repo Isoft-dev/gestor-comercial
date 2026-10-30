@@ -18,6 +18,9 @@ const loading = ref(true)
 const sending = ref(false)
 const client = reactive({
   identificacion: '',
+  nit: '',
+  razon_social: '',
+  direccion_fiscal: '',
   primer_nombre: '',
   segundo_nombre: '',
   primer_apellido: '',
@@ -91,6 +94,7 @@ async function submit() {
     cart.value = []
     Object.assign(client, {
       identificacion: '', primer_nombre: '', segundo_nombre: '',
+      nit: '', razon_social: '', direccion_fiscal: '',
       primer_apellido: '', segundo_apellido: '', correo: '', telefono: '',
     })
     await load()
@@ -176,11 +180,14 @@ onMounted(load)
         </ul>
         <p v-if="cart.length" class="product-price">Total {{ formatCurrency(cartTotal) }}</p>
         <form v-if="cart.length" class="cart-form" @submit.prevent="submit">
-          <label>Identificación<input v-model="client.identificacion" required maxlength="30" :pattern="fields.codigo.pattern" :title="fields.codigo.title" @input="client.identificacion = fields.codigo.clean($event.target.value)" /></label>
+          <label>NIT (opcional, CF si se omite)<input v-model="client.nit" :maxlength="fields.nit.maxlength" :pattern="fields.nit.pattern" :title="fields.nit.title" placeholder="CF" @input="client.nit = fields.nit.clean($event.target.value)" /></label>
+          <label>Razón social (opcional)<input v-model.trim="client.razon_social" maxlength="160" /></label>
+          <label>Dirección fiscal (opcional)<input v-model.trim="client.direccion_fiscal" maxlength="255" /></label>
+          <label>DPI<input v-model="client.identificacion" required inputmode="numeric" :maxlength="fields.dpi.maxlength" :pattern="fields.dpi.pattern" :title="fields.dpi.title" placeholder="13 dígitos" @input="client.identificacion = fields.dpi.clean($event.target.value)" /></label>
           <label>Primer nombre<input v-model="client.primer_nombre" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="client.primer_nombre = fields.persona.clean($event.target.value)" /></label>
           <label>Primer apellido<input v-model="client.primer_apellido" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="client.primer_apellido = fields.persona.clean($event.target.value)" /></label>
-          <label>Correo<input v-model="client.correo" type="email" :maxlength="fields.correo.maxlength" :pattern="fields.correo.pattern" :title="fields.correo.title" @input="client.correo = fields.correo.clean($event.target.value)" /></label>
-          <label>Teléfono<input v-model="client.telefono" :maxlength="fields.telefono.maxlength" :pattern="fields.telefono.pattern" :title="fields.telefono.title" @input="client.telefono = fields.telefono.clean($event.target.value)" /></label>
+          <label>Correo<input v-model="client.correo" type="email" required :maxlength="fields.correo.maxlength" :pattern="fields.correo.pattern" :title="fields.correo.title" @input="client.correo = fields.correo.clean($event.target.value)" /></label>
+          <label>Teléfono<input v-model="client.telefono" required :maxlength="fields.telefono.maxlength" :pattern="fields.telefono.pattern" :title="fields.telefono.title" @input="client.telefono = fields.telefono.clean($event.target.value)" /></label>
           <button class="button primary" :disabled="sending">
             <ShoppingBag :size="16" /> {{ sending ? 'Registrando…' : 'Confirmar pedido' }}
           </button>

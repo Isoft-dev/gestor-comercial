@@ -1,8 +1,10 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
+import { notify } from '../lib/notifications'
 import { askPrompt } from '../lib/dialog'
 import { formatCurrency } from '../lib/currency'
+import { clampAmount } from '../lib/fields'
 import { useAuthStore } from '../stores/auth'
 import { Ban, Check, CircleAlert, CircleCheck, ClipboardList, Filter, Plus, RefreshCw, ShoppingBag, X } from '@lucide/vue'
 
@@ -18,11 +20,21 @@ const clientQuery = ref('')
 const productQuery = ref('')
 const clientDropdownOpen = ref(false)
 const productDropdownOpen = ref(false)
-const stockWarning = ref('')
+const lines = ref([])
+const selectedOrder = ref(null)
+const subtotal = computed(() => lines.value.reduce((sum, line) => sum + line.cantidad * Number(line.PRO_Precio), 0))
+const total = computed(() => subtotal.value * (1 - Number(form.descuento_porcentaje || 0) / 100))
+
+function limitDiscount(event) {
+  const raw = Number(event.target.value)
+  if (event.target.value === '' || (raw >= 0 && raw <= 100)) return
+  notify(raw > 100 ? 'El descuento no puede ser mayor a 100 %.' : 'El descuento no puede ser negativo.', 'error')
+  form.descuento_porcentaje = clampAmount(raw, 100)
+  event.target.value = form.descuento_porcentaje
+}
 const filters = reactive({ buscar: '', estado: '' })
 let clientBlurTimeout
 let productBlurTimeout
-let stockWarningTimeout
 const filteredClients = computed(() => {
   const query = clientQuery.value.trim().toLocaleLowerCase()
   if (!query) return clients.value
@@ -131,9 +143,7 @@ function selectClient(client) {
 
 function selectProduct(product) {
   if (Number(product.INV_Existencia) <= 0) {
-    stockWarning.value = `${product.PRO_Nombre}: no disponible por falta de stock.`
-    clearTimeout(stockWarningTimeout)
-    stockWarningTimeout = setTimeout(() => { stockWarning.value = '' }, 3000)
+    notify(`${product.PRO_Nombre}: no disponible por falta de stock.`, 'error')
     return
   }
 
@@ -151,6 +161,7 @@ function orderExceedsStock(order) {
 }
 
 function clearOrderForm() {
+  lines.value = []
   form.cliente_id = ''
   form.producto_id = ''
   form.cantidad = 1
@@ -174,20 +185,23 @@ function openCreate() {
 async function submit() {
   error.value = ''
   message.value = ''
-  if (!form.cliente_id || !form.producto_id) {
-    error.value = 'Seleccione un cliente y un producto disponible de las listas.'
+  if (form.producto_id && !addLine()) return
+  if (!form.cliente_id || !lines.value.length) {
+    error.value = 'Seleccione un cliente y agregue al menos un producto al detalle.'
+    notify(error.value, 'error')
     return
   }
-  if (selectedProduct.value && Number(form.cantidad) > Number(selectedProduct.value.INV_Existencia)) {
-    error.value = `No se puede vender más de la existencia disponible. Hay ${selectedProduct.value.INV_Existencia} de ${selectedProduct.value.PRO_Nombre}.`
+  const discount = Number(form.descuento_porcentaje || 0)
+  if (Number.isNaN(discount) || discount < 0 || discount > 100) {
+    error.value = 'El descuento debe estar entre 0 % y 100 %.'
+    notify(error.value, 'error')
     return
   }
-
   try {
     await api.post('/pedidos', {
       cliente_id: form.cliente_id,
       descuento_porcentaje: form.descuento_porcentaje,
-      detalles: [{ producto_id: form.producto_id, cantidad: form.cantidad }],
+      detalles: lines.value.map((line) => ({ producto_id: line.PRO_Producto, cantidad: line.cantidad })),
     })
     message.value = Number(form.descuento_porcentaje) > 10
       ? 'Pedido creado. El descuento supera 10 % y requerirá aprobación.'
@@ -209,6 +223,33 @@ async function action(path, payload = {}) {
   } catch (requestError) {
     error.value = requestError.userMessage
   }
+
+}
+
+function addLine() {
+  const product = selectedProduct.value
+  const quantity = Number(form.cantidad)
+  const existing = lines.value.find((line) => line.PRO_Producto === product?.PRO_Producto)
+  if (!product || !Number.isInteger(quantity) || quantity < 1
+      || quantity + (existing?.cantidad || 0) > Number(product.INV_Existencia)) {
+    notify('Seleccione un producto y una cantidad válida que no supere la existencia.', 'error')
+    return false
+  }
+  if (existing) existing.cantidad += quantity
+  else lines.value.push({ ...product, cantidad: quantity })
+  form.producto_id = ''
+  form.cantidad = 1
+  productQuery.value = ''
+  productDropdownOpen.value = false
+  return true
+}
+
+function scheduleClientClose() {
+  clientBlurTimeout = setTimeout(() => { clientDropdownOpen.value = false }, 150)
+}
+
+function scheduleProductClose() {
+  productBlurTimeout = setTimeout(() => { productDropdownOpen.value = false }, 150)
 }
 
 async function cancel(id) {
@@ -240,7 +281,6 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', closeOrderDropdownsOnPointerDown)
   clearTimeout(clientBlurTimeout)
   clearTimeout(productBlurTimeout)
-  clearTimeout(stockWarningTimeout)
 })
 </script>
 
@@ -273,7 +313,7 @@ onBeforeUnmount(() => {
             :aria-expanded="clientDropdownOpen"
             @input="updateClientQuery($event.target.value)"
             @focus="openClientOptions"
-            @blur="clientBlurTimeout = setTimeout(() => { clientDropdownOpen = false }, 150)"
+            @blur="scheduleClientClose"
             @keydown.escape="clientDropdownOpen = false"
           />
           <div v-if="clientDropdownOpen" id="order-client-options" class="product-options" role="listbox">
@@ -299,13 +339,12 @@ onBeforeUnmount(() => {
             :value="productQuery"
             autocomplete="off"
             placeholder="Escriba SKU o nombre del producto"
-            required
             role="combobox"
             aria-controls="order-product-options"
             :aria-expanded="productDropdownOpen"
             @input="updateProductQuery($event.target.value)"
             @focus="openProductOptions"
-            @blur="productBlurTimeout = setTimeout(() => { productDropdownOpen = false }, 150)"
+            @blur="scheduleProductClose"
             @keydown.escape="productDropdownOpen = false"
           />
           <div v-if="productDropdownOpen" id="order-product-options" class="product-options" role="listbox">
@@ -330,9 +369,21 @@ onBeforeUnmount(() => {
       </label>
       <div class="form-grid">
         <label>Cantidad<input v-model.number="form.cantidad" type="number" min="1" :max="selectedProduct ? Number(selectedProduct.INV_Existencia) : undefined" required /><small v-if="selectedProduct">Existencia disponible: {{ selectedProduct.INV_Existencia }}</small></label>
-        <label>Descuento %<input v-model.number="form.descuento_porcentaje" type="number" min="0" max="100" step="0.01" /></label>
+        <label>Descuento %<input v-model.number="form.descuento_porcentaje" type="number" min="0" max="100" step="0.01" title="Entre 0 % y 100 %" @input="limitDiscount" /></label>
       </div>
-      <p v-if="stockWarning" class="stock-warning-toast" role="alert">{{ stockWarning }}</p>
+      <button class="button secondary" type="button" @click="addLine"><Plus :size="16" /> Agregar al detalle</button>
+      <div v-if="lines.length" class="table-wrap">
+        <table>
+          <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th><th></th></tr></thead>
+          <tbody><tr v-for="(line, index) in lines" :key="line.PRO_Producto">
+            <td>{{ line.PRO_SKU }} · {{ line.PRO_Nombre }}</td>
+            <td>{{ line.cantidad }}</td><td>{{ formatCurrency(line.PRO_Precio) }}</td>
+            <td>{{ formatCurrency(line.cantidad * Number(line.PRO_Precio)) }}</td>
+            <td><button class="link danger" type="button" @click="lines.splice(index, 1)">Quitar</button></td>
+          </tr></tbody>
+        </table>
+        <p>Subtotal: {{ formatCurrency(subtotal) }} · Descuento: {{ formatCurrency(subtotal - total) }} · Total: {{ formatCurrency(total) }}</p>
+      </div>
       <p v-if="selectedProduct && Number(form.cantidad) > Number(selectedProduct.INV_Existencia)" class="alert error"><CircleAlert :size="16" /> No se puede vender más de la existencia disponible.</p>
       <p v-if="Number(form.descuento_porcentaje) > 10" class="muted">Un descuento mayor a 10 % queda pendiente hasta que un supervisor lo apruebe.</p>
       <div class="actions">
@@ -365,7 +416,8 @@ onBeforeUnmount(() => {
               <td class="mono">{{ formatCurrency(order.PED_Total) }}</td>
               <td><span class="status" :data-state="order.PED_Estado">{{ order.PED_Estado }}</span></td>
               <td class="actions">
-                <button v-if="auth.can('PEDIDOS.REGISTRAR') && ['CREADO', 'APROBADO'].includes(order.PED_Estado)" class="link" type="button" @click="action(`/pedidos/${order.PED_Pedido}/avanzar`)"><Check :size="14" /> Avanzar</button>
+                <button class="link" type="button" @click="selectedOrder = order">Ver detalle</button>
+                <button v-if="auth.can('PEDIDOS.REGISTRAR') && order.PED_Estado === 'CREADO'" class="link" type="button" @click="action(`/pedidos/${order.PED_Pedido}/avanzar`)"><Check :size="14" /> Avanzar</button>
                 <template v-if="order.PED_Estado === 'PENDIENTE_APROBACION' && auth.can('PEDIDOS.APROBAR')">
                   <button class="link" type="button" @click="decide(order.PED_Pedido, 'APROBAR')"><Check :size="14" /> Aprobar</button>
                   <button class="link danger" type="button" @click="decide(order.PED_Pedido, 'RECHAZAR')"><X :size="14" /> Rechazar</button>
@@ -397,4 +449,28 @@ onBeforeUnmount(() => {
         </tbody>
       </table></div>
     </section>
+  <Teleport to="body">
+    <div v-if="selectedOrder" class="dialog-backdrop" @click.self="selectedOrder = null" @keydown.esc="selectedOrder = null">
+      <section class="dialog-card sale-detail-dialog" role="dialog" aria-modal="true" :aria-label="`Detalle del pedido ${selectedOrder.PED_Pedido}`" tabindex="-1">
+        <header class="sale-detail-heading">
+          <h2>Pedido #{{ selectedOrder.PED_Pedido }}</h2>
+          <button class="icon-button" type="button" aria-label="Cerrar detalle" autofocus @click="selectedOrder = null"><X :size="18" /></button>
+        </header>
+        <p>{{ selectedOrder.CLI_Primer_Nombre }} {{ selectedOrder.CLI_Primer_Apellido }} · {{ selectedOrder.CLI_Identificacion }}</p>
+        <p>{{ selectedOrder.PED_Fecha }} · {{ selectedOrder.PED_Estado }}</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>SKU / Producto</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th></tr></thead>
+          <tbody><tr v-for="line in selectedOrder.detalles" :key="line.DPE_Detalle_Pedido">
+            <td>{{ line.PRO_SKU }} · {{ line.PRO_Nombre }}</td><td>{{ line.DPE_Cantidad }}</td>
+            <td>{{ formatCurrency(line.DPE_Precio_Unitario) }}</td><td>{{ formatCurrency(line.DPE_Subtotal) }}</td>
+          </tr></tbody>
+        </table></div>
+        <p>Subtotal: {{ formatCurrency(selectedOrder.PED_Subtotal) }}</p>
+        <p>Descuento ({{ selectedOrder.PED_Descuento_Porcentaje }}%): {{ formatCurrency(selectedOrder.PED_Descuento_Monto) }}</p>
+        <h3>Total: {{ formatCurrency(selectedOrder.PED_Total) }}</h3>
+        <h3>Historial</h3>
+        <ul class="detail-list"><li v-for="step in selectedOrder.historial" :key="step.HES_Historial_Estado">{{ step.HES_Fecha }} · {{ step.HES_Estado_Nuevo }} · {{ step.HES_Motivo }}</li></ul>
+      </section>
+    </div>
+  </Teleport>
 </template>

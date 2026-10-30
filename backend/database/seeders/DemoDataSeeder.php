@@ -82,6 +82,9 @@ class DemoDataSeeder extends Seeder
 
             DB::table('TEC_CLIENTE')->insert([
                 'CLI_Identificacion' => $identification,
+                'CLI_NIT' => 'CF',
+                'CLI_Razon_Social' => implode(' ', array_filter([$firstName, $secondName, $firstSurname, $secondSurname])),
+                'CLI_Direccion_Fiscal' => 'Ciudad de Guatemala',
                 'CLI_Primer_Nombre' => $firstName,
                 'CLI_Segundo_Nombre' => $secondName,
                 'CLI_Primer_Apellido' => $firstSurname,

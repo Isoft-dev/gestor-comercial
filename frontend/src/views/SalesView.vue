@@ -1,9 +1,12 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
+import { downloadInvoice } from '../lib/invoice'
 import { formatCurrency } from '../lib/currency'
+import { isValidCardNumber } from '../lib/fields'
+import { notify } from '../lib/notifications'
 import { useAuthStore } from '../stores/auth'
-import { Banknote, CircleAlert, CircleCheck, Eye, Filter, LockKeyhole, Receipt, RefreshCw, Wallet, X } from '@lucide/vue'
+import { Banknote, CircleAlert, CircleCheck, CreditCard, Eye, Filter, Landmark, LockKeyhole, Receipt, RefreshCw, Wallet, X } from '@lucide/vue'
 
 const auth = useAuthStore()
 const sales = ref([])
@@ -18,6 +21,42 @@ const cardPaymentStatus = ref('')
 const filters = reactive({ buscar: '', estado_pago: '', desde: '', hasta: '' })
 const requiresReference = computed(() => payment.metodo === 'TRANSFERENCIA')
 const isDemoCardPayment = computed(() => payment.metodo === 'TARJETA')
+const selectedBalance = computed(() => {
+  const sale = sales.value.find((item) => item.VEN_Venta == payment.venta_id)
+  return sale ? Number(sale.VEN_Saldo) : 0
+})
+
+function limitAmount(event) {
+  const raw = Number(event.target.value)
+  if (event.target.value === '' || !selectedBalance.value || raw <= selectedBalance.value) return
+  notify(`El monto no puede superar el saldo pendiente de ${formatCurrency(selectedBalance.value)}.`, 'error')
+  payment.monto = selectedBalance.value
+  event.target.value = selectedBalance.value
+}
+const cardBrand = computed(() => {
+  const digits = card.number.replace(/\D/g, '')
+  if (/^4/.test(digits)) return 'VISA'
+  if (/^(5[1-5]|2[2-7])/.test(digits)) return 'MASTERCARD'
+  if (/^3[47]/.test(digits)) return 'AMEX'
+  return ''
+})
+const cardPreviewNumber = computed(() => {
+  const digits = card.number.replace(/\D/g, '').padEnd(16, '•')
+  return digits.replace(/(.{4})/g, '$1 ').trim()
+})
+
+function methodIcon(code) {
+  if (code === 'TARJETA') return CreditCard
+  if (code === 'TRANSFERENCIA') return Landmark
+  return Banknote
+}
+
+function methodHint(code) {
+  if (code === 'TARJETA') return 'Crédito o débito'
+  if (code === 'TRANSFERENCIA') return 'Requiere referencia'
+  if (code === 'EFECTIVO') return 'Pago en caja'
+  return 'Otro método'
+}
 
 async function load() {
   error.value = ''
@@ -73,6 +112,9 @@ function validateDemoCard() {
   if (!/^\d{16}$/.test(card.number.replace(/\D/g, ''))) {
     return 'El número de tarjeta debe contener exactamente 16 dígitos.'
   }
+  if (!isValidCardNumber(card.number)) {
+    return 'El número de tarjeta no es válido. Verifique los dígitos.'
+  }
 
   const year = Number(`20${card.expiryYear}`)
   const month = Number(card.expiryMonth)
@@ -120,9 +162,19 @@ async function submit() {
   }
 
   const demoCardPayment = isDemoCardPayment.value
-  if (demoCardPayment) {
+  const amount = Number(payment.monto)
+  if (!amount || amount <= 0) {
+    error.value = 'Ingrese un monto mayor a cero.'
+  } else if (!/^\d+(\.\d{1,2})?$/.test(String(payment.monto))) {
+    error.value = 'El monto admite como máximo 2 decimales.'
+  } else if (selectedBalance.value && amount > selectedBalance.value) {
+    error.value = `El monto no puede superar el saldo pendiente de ${formatCurrency(selectedBalance.value)}.`
+  } else if (demoCardPayment) {
     error.value = validateDemoCard()
-    if (error.value) return
+  }
+  if (error.value) {
+    notify(error.value, 'error')
+    return
   }
 
   const reference = demoCardPayment
@@ -134,12 +186,12 @@ async function submit() {
       cardPaymentStatus.value = 'processing'
       await new Promise((resolve) => setTimeout(resolve, 3000))
     }
-    await api.post(`/ventas/${payment.venta_id}/pagos`, {
+    const { data } = await api.post(`/ventas/${payment.venta_id}/pagos`, {
       monto: payment.monto,
       metodo: payment.metodo,
       referencia: reference,
     })
-    message.value = demoCardPayment ? 'Pago de demostración registrado correctamente.' : 'Pago registrado.'
+    message.value = data.message || 'Pago registrado.'
     closePayment()
     await load()
     if (demoCardPayment) cardPaymentStatus.value = 'success'
@@ -153,6 +205,14 @@ async function submit() {
 
 function closeCardPaymentStatus() {
   cardPaymentStatus.value = ''
+}
+
+async function invoice(saleId) {
+  try {
+    await downloadInvoice(saleId)
+  } catch (requestError) {
+    error.value = requestError.userMessage
+  }
 }
 
 onMounted(load)
@@ -176,75 +236,105 @@ onMounted(load)
   <form class="panel compact-form" :inert="!formOpen" autocomplete="off" @submit.prevent="submit">
     <div class="panel-heading"><Banknote :size="18" /><h2>Registrar pago</h2></div>
     <label>Venta<select v-model="payment.venta_id" required @change="selectSale(sales.find((sale) => sale.VEN_Venta == payment.venta_id))"><option value="">Seleccione</option><option v-for="sale in sales.filter((item) => Number(item.VEN_Saldo) > 0)" :key="sale.VEN_Venta" :value="sale.VEN_Venta">#{{ sale.VEN_Venta }} · Saldo {{ formatCurrency(sale.VEN_Saldo) }}</option></select></label>
-    <label>Monto (Q)<input v-model.number="payment.monto" type="number" min="0.01" step="0.01" required /></label>
-    <label>Método
-      <select v-model="payment.metodo" required :disabled="methods.length === 0" @change="changePaymentMethod">
-        <option value="" disabled>Seleccione un método</option>
-        <option v-for="method in methods" :key="method.MPA_Metodo_Pago" :value="method.MPA_Codigo">{{ method.MPA_Nombre }}</option>
-      </select>
+    <label>Monto (Q)<input v-model.number="payment.monto" type="number" min="0.01" :max="selectedBalance || undefined" step="0.01" required :title="selectedBalance ? `Máximo ${formatCurrency(selectedBalance)}` : ''" @input="limitAmount" />
+      <small v-if="selectedBalance" class="muted">Saldo pendiente: {{ formatCurrency(selectedBalance) }}</small>
     </label>
+    <fieldset class="method-options" :disabled="methods.length === 0">
+      <legend>Método de pago</legend>
+      <label v-for="method in methods" :key="method.MPA_Metodo_Pago" class="method-option" :class="{ active: payment.metodo === method.MPA_Codigo }">
+        <input v-model="payment.metodo" type="radio" name="metodo" :value="method.MPA_Codigo" required @change="changePaymentMethod" />
+        <span class="method-icon"><component :is="methodIcon(method.MPA_Codigo)" :size="20" /></span>
+        <span class="method-copy">
+          <strong>{{ method.MPA_Nombre }}</strong>
+          <small>{{ methodHint(method.MPA_Codigo) }}</small>
+        </span>
+        <CircleCheck v-if="payment.metodo === method.MPA_Codigo" class="method-check" :size="18" />
+      </label>
+    </fieldset>
     <label v-if="requiresReference">No. de pago o solicitud
       <input v-model.trim="payment.referencia" maxlength="80" required placeholder="Ingrese la referencia de la transferencia" />
     </label>
-    <template v-if="isDemoCardPayment">
-      <label>Nombre del titular
-        <input v-model.trim="card.holder" autocomplete="off" maxlength="100" required />
-      </label>
-      <label>Número de tarjeta
-        <input
-          :value="card.number"
-          type="text"
-          inputmode="numeric"
-          autocomplete="off"
-          maxlength="19"
-          placeholder="0000 0000 0000 0000"
-          required
-          @input="formatCardNumber"
-        />
-      </label>
-      <label>Vencimiento
-        <div class="form-grid card-expiry">
-          <input
-            :value="card.expiryMonth"
-            type="text"
-            inputmode="numeric"
-            autocomplete="off"
-            maxlength="2"
-            pattern="0[1-9]|1[0-2]"
-            placeholder="MM"
-            aria-label="Mes de vencimiento"
-            required
-            @input="limitNumericInput($event, 'expiryMonth', 2)"
-          />
-          <input
-            :value="card.expiryYear"
-            type="text"
-            inputmode="numeric"
-            autocomplete="off"
-            maxlength="2"
-            pattern="[0-9]{2}"
-            placeholder="AA"
-            aria-label="Año de vencimiento"
-            required
-            @input="limitNumericInput($event, 'expiryYear', 2)"
-          />
+    <section v-if="isDemoCardPayment" class="card-pay" aria-label="Datos de la tarjeta">
+      <div class="card-visual" :class="cardBrand.toLowerCase()" aria-hidden="true">
+        <div class="card-visual-top">
+          <span class="card-chip"></span>
+          <span class="card-brand">{{ cardBrand || 'TARJETA' }}</span>
         </div>
-      </label>
-      <label>CVV
-        <input
-          :value="card.cvv"
-          type="text"
-          inputmode="numeric"
-          autocomplete="off"
-          maxlength="4"
-          pattern="[0-9]{3,4}"
-          required
-          @input="limitNumericInput($event, 'cvv', 4)"
-        />
-      </label>
-    </template>
+        <div class="card-visual-number">{{ cardPreviewNumber }}</div>
+        <div class="card-visual-bottom">
+          <div><small>Titular</small><span>{{ card.holder ? card.holder.toUpperCase() : 'NOMBRE DEL TITULAR' }}</span></div>
+          <div><small>Vence</small><span>{{ card.expiryMonth || 'MM' }}/{{ card.expiryYear || 'AA' }}</span></div>
+        </div>
+      </div>
+      <div class="card-fields">
+        <label class="span-2">Nombre del titular
+          <input v-model.trim="card.holder" autocomplete="off" maxlength="100" placeholder="Como aparece en la tarjeta" required />
+        </label>
+        <label class="span-2">Número de tarjeta
+          <span class="input-icon">
+            <CreditCard :size="18" />
+            <input
+              :value="card.number"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              maxlength="19"
+              placeholder="0000 0000 0000 0000"
+              required
+              @input="formatCardNumber"
+            />
+          </span>
+        </label>
+        <label>Vencimiento
+          <span class="card-expiry">
+            <input
+              :value="card.expiryMonth"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              maxlength="2"
+              pattern="0[1-9]|1[0-2]"
+              placeholder="MM"
+              aria-label="Mes de vencimiento"
+              required
+              @input="limitNumericInput($event, 'expiryMonth', 2)"
+            />
+            <span aria-hidden="true">/</span>
+            <input
+              :value="card.expiryYear"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              maxlength="2"
+              pattern="[0-9]{2}"
+              placeholder="AA"
+              aria-label="Año de vencimiento"
+              required
+              @input="limitNumericInput($event, 'expiryYear', 2)"
+            />
+          </span>
+        </label>
+        <label>CVV
+          <input
+            :value="card.cvv"
+            type="password"
+            inputmode="numeric"
+            autocomplete="off"
+            maxlength="4"
+            pattern="[0-9]{3,4}"
+            placeholder="•••"
+            required
+            @input="limitNumericInput($event, 'cvv', 4)"
+          />
+        </label>
+        <p class="card-secure span-2"><LockKeyhole :size="14" /> Pago de demostración: los datos de la tarjeta no se guardan.</p>
+      </div>
+    </section>
     <div class="actions">
-      <button class="button primary" type="submit" :disabled="cardPaymentStatus === 'processing' || methods.length === 0"><Banknote :size="16" /> Registrar</button>
+      <button class="button primary" type="submit" :disabled="cardPaymentStatus === 'processing' || methods.length === 0">
+        <component :is="isDemoCardPayment ? CreditCard : Banknote" :size="16" />
+        {{ isDemoCardPayment ? `Pagar ${formatCurrency(payment.monto || 0)}` : 'Registrar' }}
+      </button>
       <button class="button secondary" type="button" @click="closePayment"><X :size="16" /> Cancelar</button>
     </div>
   </form>
@@ -295,7 +385,10 @@ onMounted(load)
             <td class="mono">{{ formatCurrency(sale.VEN_Pagado) }}</td>
             <td class="mono">{{ formatCurrency(sale.VEN_Saldo) }}</td>
             <td><span class="status" :data-state="sale.VEN_Estado_Pago">{{ sale.VEN_Estado_Pago }}</span></td>
-            <td><button class="link" type="button" @click="selectedSale = sale"><Eye :size="14" /> Ver Detalle</button></td>
+            <td class="actions">
+              <button class="link" type="button" @click="selectedSale = sale"><Eye :size="14" /> Ver Detalle</button>
+              <button v-if="sale.FAC_Factura" class="link" type="button" @click="invoice(sale.VEN_Venta)"><Receipt :size="14" /> Factura PDF</button>
+            </td>
           </tr>
         </template>
       </tbody>
@@ -326,7 +419,7 @@ onMounted(load)
             <h3>Cliente</h3>
             <dl>
               <div><dt>Nombre</dt><dd>{{ selectedSale.CLI_Primer_Nombre }} {{ selectedSale.CLI_Segundo_Nombre }} {{ selectedSale.CLI_Primer_Apellido }} {{ selectedSale.CLI_Segundo_Apellido }}</dd></div>
-              <div><dt>Identificación</dt><dd>{{ selectedSale.CLI_Identificacion }}</dd></div>
+              <div><dt>DPI</dt><dd>{{ selectedSale.CLI_Identificacion }}</dd></div>
               <div><dt>Correo</dt><dd>{{ selectedSale.CLI_Correo || 'No registrado' }}</dd></div>
               <div><dt>Teléfono</dt><dd>{{ selectedSale.CLI_Telefono || 'No registrado' }}</dd></div>
             </dl>

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { releasePageRequest, trackPageRequest } from '../lib/pageLoading'
+import { notify } from '../lib/notifications'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
@@ -19,11 +20,21 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => {
+    if (response.config.trackedMutation && !['/login', '/logout'].includes(response.config.url)) {
+      notify(response.data?.message || 'Operación completada correctamente.')
+    }
     releasePageRequest(response.config)
     return response
   },
-  (error) => {
+  async (error) => {
     releasePageRequest(error.config)
+    if (typeof Blob !== 'undefined' && error.response?.data instanceof Blob) {
+      try {
+        error.response.data = JSON.parse(await error.response.data.text())
+      } catch {
+        error.response.data = {}
+      }
+    }
     const status = error.response?.status
     const path = window.location.pathname
     if (status === 401) {
@@ -45,6 +56,7 @@ api.interceptors.response.use(
       Boolean(error.response),
       Boolean(validationMessage),
     )
+    notify(error.userMessage, 'error')
     return Promise.reject(error)
   },
 )

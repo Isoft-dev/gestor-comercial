@@ -2,6 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppDialog from './components/AppDialog.vue'
+import AppNotifications from './components/AppNotifications.vue'
+import { pendingMutations } from './lib/pageLoading'
 import { esEntregaCierre, moduloEnEntrega } from './config/entrega'
 import { pageLoading } from './lib/pageLoading'
 import { prefetchModules } from './lib/prefetch'
@@ -93,7 +95,14 @@ async function signOut() {
 
 <template>
   <AppDialog />
-  <div v-if="auth.isAuthenticated && !route.meta.public" class="app-shell" :class="{ collapsed }">
+  <AppNotifications />
+  <Teleport to="body">
+    <div v-if="pendingMutations > 0" class="mutation-loading" role="status" aria-live="polite" aria-label="Procesando cambios">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>Procesando cambios…</p>
+    </div>
+  </Teleport>
+  <div v-if="auth.isAuthenticated && !route.meta.public" class="app-shell" :class="{ collapsed }" :inert="pendingMutations > 0">
     <header class="topbar">
       <button class="icon-button" type="button" aria-label="Abrir menú" @click="menuOpen = true">
         <Menu :size="20" :stroke-width="2" />
@@ -145,7 +154,7 @@ async function signOut() {
     <main class="content">
       <RouterView v-slot="{ Component, route: current }">
         <Transition name="page" mode="out-in">
-          <div :key="current.path" class="page-stage">
+          <div :key="current.path" class="page-stage" :inert="pendingMutations > 0">
             <Suspense>
               <component :is="Component" />
               <template #fallback>

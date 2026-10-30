@@ -4,6 +4,7 @@ use App\Http\Controllers\AuditController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\ReportController;
@@ -59,6 +60,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/pedidos/{id}/cancelar', [OrderController::class, 'cancel']);
 
     Route::get('/ventas', [SaleController::class, 'index']);
+    Route::get('/ventas/{id}/factura', [InvoiceController::class, 'show']);
     Route::post('/pedidos/{id}/vender', [SaleController::class, 'storeFromOrder']);
     Route::post('/ventas/{id}/pagos', [SaleController::class, 'payment']);
 

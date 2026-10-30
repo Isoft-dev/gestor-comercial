@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Billing;
 use App\Support\Catalogos;
 use App\Support\FieldRules;
 use Illuminate\Http\JsonResponse;
@@ -38,13 +39,14 @@ class ShopController extends ApiController
     public function order(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'identificacion' => FieldRules::identification(),
+            ...Billing::rules(),
+            'identificacion' => FieldRules::dpi(),
             'primer_nombre' => FieldRules::personName(),
             'segundo_nombre' => FieldRules::personName(false),
             'primer_apellido' => FieldRules::personName(),
             'segundo_apellido' => FieldRules::personName(false),
-            'correo' => FieldRules::email(),
-            'telefono' => FieldRules::phone(),
+            'correo' => FieldRules::email(true),
+            'telefono' => FieldRules::phone(true),
             'detalles' => ['required', 'array', 'min:1'],
             'detalles.*.producto_id' => ['required', 'integer', 'distinct', 'exists:TEC_PRODUCTO,PRO_Producto'],
             'detalles.*.cantidad' => ['required', 'integer', 'min:1'],
@@ -87,6 +89,7 @@ class ShopController extends ApiController
                 $clientId = $client->CLI_Cliente;
             } else {
                 $clientId = DB::table('TEC_CLIENTE')->insertGetId([
+                    ...Billing::clientData($data),
                     'CLI_Identificacion' => $data['identificacion'],
                     'CLI_Primer_Nombre' => $data['primer_nombre'],
                     'CLI_Segundo_Nombre' => $data['segundo_nombre'] ?? null,

@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Billing;
 use App\Support\Catalogos;
+use App\Support\FieldRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,8 +22,10 @@ class SaleController extends ApiController
             ->join('TEC_ESTADO_PEDIDO as order_state', 'order_state.ESP_Estado_Pedido', '=', 'p.ESP_Estado_Pedido')
             ->join('TEC_ESTADO_PAGO as ep', 'ep.EPA_Estado_Pago', '=', 'v.EPA_Estado_Pago')
             ->join('TEC_ESTADO_VENTA as ev', 'ev.ESV_Estado_Venta', '=', 'v.ESV_Estado_Venta')
+            ->leftJoin('TEC_FACTURA as f', 'f.VEN_Venta', '=', 'v.VEN_Venta')
             ->select(
                 'v.*',
+                'f.FAC_Factura',
                 'p.PED_Fecha',
                 'p.PED_Subtotal',
                 'p.PED_Descuento_Porcentaje',
@@ -204,25 +208,30 @@ class SaleController extends ApiController
 
         $this->audit($request, 'VENTAS', 'FINALIZAR', $saleId, ['pedido' => $orderId]);
 
-        return response()->json(['id' => $saleId, 'message' => 'Venta finalizada e inventario actualizado.'], 201);
+        return response()->json(['id' => $saleId, 'message' => 'Venta finalizada e inventario actualizado. La factura se emitirá al completar el pago.'], 201);
     }
 
     public function payment(Request $request, int $saleId): JsonResponse
     {
         $this->requirePermission($request, 'PAGOS.REGISTRAR');
         $data = $request->validate([
-            'monto' => ['required', 'numeric', 'gt:0'],
+            'monto' => ['required', 'numeric', 'gt:0', 'decimal:0,2'],
             'metodo' => ['required', 'string', Rule::exists('TEC_METODO_PAGO', 'MPA_Codigo')->where('MPA_Estado', true)],
             'referencia' => ['required_if:metodo,TRANSFERENCIA,TARJETA', 'nullable', 'string', 'max:80'],
-        ]);
+        ], FieldRules::messages());
 
-        $paymentId = DB::transaction(function () use ($request, $saleId, $data) {
+        [$paymentId, $invoiceId] = DB::transaction(function () use ($request, $saleId, $data) {
             $sale = DB::table('TEC_VENTA')->where('VEN_Venta', $saleId)->lockForUpdate()->first();
             abort_unless($sale, 404, 'Venta no encontrada.');
-            abort_if((float) $data['monto'] > (float) $sale->VEN_Saldo, 422, 'El pago supera el saldo pendiente.');
+            abort_if(
+                round((float) $data['monto'], 2) > round((float) $sale->VEN_Saldo, 2),
+                422,
+                'El monto no puede superar el saldo pendiente de Q '.number_format((float) $sale->VEN_Saldo, 2).'.',
+            );
 
             $paid = (float) $sale->VEN_Pagado + (float) $data['monto'];
             $balance = round((float) $sale->VEN_Total - $paid, 2);
+            $invoiceId = $balance <= 0 ? $this->issueInvoice($sale) : null;
             DB::table('TEC_VENTA')->where('VEN_Venta', $saleId)->update([
                 'VEN_Pagado' => $paid,
                 'VEN_Saldo' => $balance,
@@ -230,7 +239,7 @@ class SaleController extends ApiController
                 'updated_at' => now(),
             ]);
 
-            return DB::table('TEC_PAGO')->insertGetId([
+            $paymentId = DB::table('TEC_PAGO')->insertGetId([
                 'VEN_Venta' => $saleId,
                 'USU_Usuario' => $request->user()->USU_Usuario,
                 'PAG_Monto' => $data['monto'],
@@ -240,10 +249,54 @@ class SaleController extends ApiController
                 'created_at' => now(),
                 'updated_at' => now(),
             ], 'PAG_Pago');
+
+            return [$paymentId, $invoiceId];
         });
 
         $this->audit($request, 'PAGOS', 'REGISTRAR', $paymentId, ['venta' => $saleId, 'monto' => $data['monto']]);
+        if ($invoiceId) {
+            $this->audit($request, 'VENTAS', 'FACTURAR', $invoiceId, ['venta' => $saleId]);
+        }
 
-        return response()->json(['id' => $paymentId, 'message' => 'Pago registrado.'], 201);
+        return response()->json([
+            'id' => $paymentId,
+            'factura_id' => $invoiceId,
+            'message' => $invoiceId ? 'Pago completado y factura emitida.' : 'Pago registrado.',
+        ], 201);
+    }
+
+    private function issueInvoice(object $sale): int
+    {
+        $existing = DB::table('TEC_FACTURA')->where('VEN_Venta', $sale->VEN_Venta)->value('FAC_Factura');
+        if ($existing) {
+            return (int) $existing;
+        }
+        $order = DB::table('TEC_PEDIDO')->where('PED_Pedido', $sale->PED_Pedido)->first();
+        $client = DB::table('TEC_CLIENTE')->where('CLI_Cliente', $order->CLI_Cliente)->first();
+        $invoiceClient = $client ? Billing::invoiceClient($client) : null;
+        abort_unless(
+            $invoiceClient,
+            422,
+            'Para facturar, el cliente debe tener nombre completo, correo y teléfono.',
+        );
+        $details = DB::table('TEC_DETALLE_PEDIDO as d')
+            ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'd.PRO_Producto')
+            ->where('d.PED_Pedido', $order->PED_Pedido)
+            ->orderBy('p.PRO_Nombre')
+            ->get(['p.PRO_SKU', 'p.PRO_Nombre', 'd.DPE_Cantidad', 'd.DPE_Precio_Unitario', 'd.DPE_Subtotal']);
+
+        return DB::table('TEC_FACTURA')->insertGetId([
+            'VEN_Venta' => $sale->VEN_Venta,
+            'FAC_Fecha' => now(),
+            'FAC_Datos' => json_encode([
+                'pedido' => $order->PED_Pedido,
+                'cliente' => $invoiceClient,
+                'detalles' => $details->map(fn ($line) => (array) $line)->all(),
+                'subtotal' => $order->PED_Subtotal,
+                'descuento_porcentaje' => $order->PED_Descuento_Porcentaje,
+                'descuento' => $order->PED_Descuento_Monto,
+                'total' => $order->PED_Total,
+            ], JSON_THROW_ON_ERROR),
+        ], 'FAC_Factura');
     }
 }

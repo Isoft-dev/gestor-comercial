@@ -111,10 +111,9 @@ class TechStoreFlowTest extends TestCase
 
         $saleDetails = $this->getJson("/api/ventas?con_opciones=1&buscar={$saleId}")
             ->assertOk()
-            ->assertJsonPath('data.data.0.PED_Pedido', $orderId)
+            ->assertJsonPath('data.0.PED_Pedido', $orderId)
             ->assertJsonStructure([
-                'data' => [
-                    'data' => [[
+                'data' => [[
                         'VEN_Fecha',
                         'PED_Fecha',
                         'PED_Subtotal',
@@ -143,10 +142,9 @@ class TechStoreFlowTest extends TestCase
                             'PAG_Usuario_Nombre',
                             'PAG_Usuario_Apellido',
                         ]],
-                    ]],
-                ],
+                ]],
             ]);
-        $this->assertEquals(5, (float) $saleDetails->json('data.data.0.PED_Descuento_Porcentaje'));
+        $this->assertEquals(5, (float) $saleDetails->json('data.0.PED_Descuento_Porcentaje'));
     }
 
     public function test_sale_with_insufficient_inventory_is_rejected_without_partial_changes(): void
@@ -164,6 +162,7 @@ class TechStoreFlowTest extends TestCase
         $this->postJson("/api/pedidos/{$orderId}/vender")->assertConflict();
 
         $this->assertDatabaseMissing('TEC_VENTA', ['PED_Pedido' => $orderId]);
+        $this->assertDatabaseCount('TEC_FACTURA', 0);
         $this->assertDatabaseHas('TEC_INVENTARIO', [
             'PRO_Producto' => $product,
             'INV_Existencia' => 0,
@@ -446,16 +445,24 @@ class TechStoreFlowTest extends TestCase
         $this->actingAs($operator, 'sanctum');
 
         $id = $this->postJson('/api/catalogos/clientes', [
-            'identificacion' => 'DPI-908070',
+            'identificacion' => '2514254140101',
+            'nit' => '12345678',
+            'razon_social' => 'Laura Méndez',
+            'direccion_fiscal' => 'Zona 1, Guatemala',
             'primer_nombre' => 'Laura',
             'primer_apellido' => 'Méndez',
             'correo' => 'laura@example.test',
+            'telefono' => '55554321',
         ])->assertCreated()->json('id');
 
         $this->putJson("/api/catalogos/clientes/{$id}", [
-            'identificacion' => 'DPI-908070',
+            'identificacion' => '2514254140101',
+            'nit' => 'CF',
+            'razon_social' => 'Laura Morales',
+            'direccion_fiscal' => 'Zona 2, Guatemala',
             'primer_nombre' => 'Laura',
             'primer_apellido' => 'Morales',
+            'correo' => 'laura@example.test',
             'telefono' => '55553333',
         ])->assertOk();
 
@@ -1100,17 +1107,21 @@ class TechStoreFlowTest extends TestCase
         DB::table('TEC_INVENTARIO')->where('PRO_Producto', $product->PRO_Producto)->update(['INV_Existencia' => 4]);
 
         $orderId = $this->postJson('/api/tienda/pedidos', [
-            'identificacion' => 'DPI-888001',
+            'identificacion' => '2514254140102',
             'primer_nombre' => 'Ana',
             'primer_apellido' => 'Cliente',
+            'correo' => 'ana.cliente@example.test',
+            'telefono' => '55550001',
             'detalles' => [['producto_id' => $product->PRO_Producto, 'cantidad' => 2]],
         ])->assertCreated()->json('id');
         $this->assertDatabaseHas('TEC_PEDIDO', ['PED_Pedido' => $orderId, 'PED_Total' => 70]);
 
         $this->postJson('/api/tienda/pedidos', [
-            'identificacion' => 'DPI-888001',
+            'identificacion' => '2514254140102',
             'primer_nombre' => 'Ana',
             'primer_apellido' => 'Cliente',
+            'correo' => 'ana.cliente@example.test',
+            'telefono' => '55550001',
             'detalles' => [['producto_id' => $product->PRO_Producto, 'cantidad' => 9]],
         ])->assertUnprocessable();
 
@@ -1150,7 +1161,7 @@ class TechStoreFlowTest extends TestCase
         $this->getJson('/api/catalogos/productos')->assertForbidden();
         $this->getJson('/api/usuarios')->assertForbidden();
         $this->postJson('/api/catalogos/clientes', [
-            'identificacion' => 'DPI-333444',
+            'identificacion' => '2514254140103',
             'primer_nombre' => 'Mario',
             'primer_apellido' => 'Lector',
         ])->assertForbidden();
@@ -1237,7 +1248,7 @@ class TechStoreFlowTest extends TestCase
         ])->assertUnprocessable();
 
         $this->postJson('/api/catalogos/clientes', [
-            'identificacion' => 'DPI-111222',
+            'identificacion' => '2514254140104',
             'primer_nombre' => 'Ana#',
             'primer_apellido' => 'Lopez',
         ])->assertUnprocessable();
@@ -1249,7 +1260,7 @@ class TechStoreFlowTest extends TestCase
         $this->actingAs($admin, 'sanctum');
 
         $this->postJson('/api/catalogos/clientes', [
-            'identificacion' => 'DPI-333444',
+            'identificacion' => '2514254140103',
             'primer_nombre' => 'Laura',
             'primer_apellido' => 'Méndez',
             'telefono' => '555533339',
@@ -1296,7 +1307,7 @@ class TechStoreFlowTest extends TestCase
         $role = DB::table('TEC_ROL')->where('ROL_Nombre', 'OPERADOR')->value('ROL_Rol');
 
         $this->postJson('/api/catalogos/clientes', [
-            'identificacion' => 'DPI-555666',
+            'identificacion' => '2514254140105',
             'primer_nombre' => 'Laura',
             'primer_apellido' => 'Méndez',
             'correo' => 'correo-invalido',

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Billing;
 use App\Models\User;
 use App\Support\Catalogos;
 use App\Support\FieldRules;
@@ -92,6 +93,8 @@ class CatalogController extends ApiController
             } elseif ($type === 'clientes') {
                 $query->where(function ($builder) use ($search) {
                     $builder->where('CLI_Identificacion', 'like', "%{$search}%")
+                        ->orWhere('CLI_NIT', 'like', "%{$search}%")
+                        ->orWhere('CLI_Razon_Social', 'like', "%{$search}%")
                         ->orWhere('CLI_Primer_Nombre', 'like', "%{$search}%")
                         ->orWhere('CLI_Segundo_Nombre', 'like', "%{$search}%")
                         ->orWhere('CLI_Primer_Apellido', 'like', "%{$search}%")
@@ -517,16 +520,18 @@ class CatalogController extends ApiController
     private function clientData(Request $request, ?int $id): array
     {
         $data = $request->validate([
-            'identificacion' => [...FieldRules::identification(), Rule::unique('TEC_CLIENTE', 'CLI_Identificacion')->ignore($id, 'CLI_Cliente')],
+            ...Billing::rules(),
+            'identificacion' => [...FieldRules::dpi(), Rule::unique('TEC_CLIENTE', 'CLI_Identificacion')->ignore($id, 'CLI_Cliente')],
             'primer_nombre' => FieldRules::personName(),
             'segundo_nombre' => FieldRules::personName(false),
             'primer_apellido' => FieldRules::personName(),
             'segundo_apellido' => FieldRules::personName(false),
-            'correo' => FieldRules::email(),
-            'telefono' => FieldRules::phone(),
+            'correo' => FieldRules::email(true),
+            'telefono' => FieldRules::phone(true),
         ], FieldRules::messages());
 
         return [
+            ...Billing::clientData($data),
             'CLI_Identificacion' => $data['identificacion'],
             'CLI_Primer_Nombre' => $data['primer_nombre'],
             'CLI_Segundo_Nombre' => $data['segundo_nombre'] ?? null,

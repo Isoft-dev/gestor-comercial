@@ -37,6 +37,9 @@ class DatabaseSeeder extends Seeder
 
         DB::table('TEC_CLIENTE')->insert([
             'CLI_Identificacion' => 'CF-001',
+            'CLI_NIT' => 'CF',
+            'CLI_Razon_Social' => 'Cliente Demostración',
+            'CLI_Direccion_Fiscal' => 'Ciudad de Guatemala',
             'CLI_Primer_Nombre' => 'Cliente',
             'CLI_Primer_Apellido' => 'Demostración',
             'CLI_Correo' => 'cliente@example.test',

@@ -14,6 +14,41 @@ Sistema académico de gestión para una tienda de accesorios y periféricos tecn
 - Auditoría.
 - Dashboard con cinco indicadores, dos gráficas y filtro por fechas.
 - Cuatro reportes, filtro por fechas y exportación CSV o PDF.
+- Datos fiscales de clientes (NIT o CF, nombre/razón social y dirección fiscal).
+- Pedidos con varios productos, detalle de importes e historial.
+- Factura PDF emitida automáticamente cuando el pago deja el saldo en cero, con copia inmutable de los datos del cliente y los productos.
+- Indicador de procesamiento y avisos inferiores para las operaciones.
+
+### Facturación y flujo de pedidos
+
+Ejecuta `php -c ..\php.ini artisan migrate` desde `backend` al actualizar.
+Los clientes existentes conservan sus datos. Para facturar basta con que el
+cliente tenga nombre completo, correo y teléfono (obligatorios en clientes nuevos).
+NIT, razón social y dirección fiscal son opcionales: si faltan, la factura usa
+`CF`, el nombre completo del cliente y "Ciudad", respectivamente.
+
+El pedido avanza una sola vez: de CREADO a APROBADO, o a
+PENDIENTE_APROBACION si el descuento supera 10 %. Después de la aprobación,
+**Vender** finaliza la venta y descuenta inventario. Los pedidos antiguos
+EN_PROCESO aún pueden venderse. Los pagos parciales no facturan; el pago que
+deja el saldo en cero emite la factura en la misma transacción; el PDF se
+descarga cuando se necesite con el botón **Factura PDF** en Ventas. Si el cliente no tiene
+correo o teléfono, ese pago final se rechaza sin registrarse.
+Las ventas pagadas antes de esta actualización no reciben facturas retroactivas.
+Los importes y datos fiscales emitidos no cambian si luego se edita al cliente
+o al producto. Esta facturación es interna, sin integración ni certificación FEL.
+
+### Validaciones de datos
+
+- DPI: exactamente 13 dígitos.
+- NIT: hasta 8 caracteres (dígitos y verificador final opcional `K`), o `CF` si se deja vacío.
+- Teléfono: 8 dígitos y debe iniciar con 2–7 (formato de Guatemala).
+- Tarjeta (demostración): 16 dígitos con verificación Luhn, vencimiento futuro y CVV.
+- Descuento del pedido: entre 0 % y 100 %, con hasta 2 decimales.
+- Pago: mayor a cero, hasta 2 decimales, y sin superar el saldo pendiente.
+
+Los clientes existentes que tengan teléfonos o DPI con el formato anterior deben
+corregirse la próxima vez que se editen.
 
 ## Arquitectura
 
@@ -108,5 +143,6 @@ cd backend
 php -c ..\php.ini vendor\bin\phpunit
 
 cd ..\frontend
+node --test src\lib\feedback.test.js
 npm run build
 ```

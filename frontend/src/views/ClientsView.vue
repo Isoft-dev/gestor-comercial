@@ -22,6 +22,9 @@ const form = reactive(emptyForm())
 function emptyForm() {
   return {
     identificacion: '',
+    nit: '',
+    razon_social: '',
+    direccion_fiscal: '',
     primer_nombre: '',
     segundo_nombre: '',
     primer_apellido: '',
@@ -92,6 +95,9 @@ function edit(item) {
   editingId.value = item.CLI_Cliente
   Object.assign(form, {
     identificacion: item.CLI_Identificacion,
+    nit: item.CLI_NIT || '',
+    razon_social: item.CLI_Razon_Social || '',
+    direccion_fiscal: item.CLI_Direccion_Fiscal || '',
     primer_nombre: item.CLI_Primer_Nombre,
     segundo_nombre: item.CLI_Segundo_Nombre || '',
     primer_apellido: item.CLI_Primer_Apellido,
@@ -160,7 +166,7 @@ function toggleSort(column) {
   </header>
   <form class="filter-bar" @submit.prevent="load">
     <label>Buscar
-      <input v-model="search" type="search" placeholder="ID, identificación o nombre" />
+      <input v-model="search" type="search" placeholder="ID, identificación, NIT o nombre" />
     </label>
     <label>Estado
       <select v-model="statusFilter" @change="load">
@@ -181,13 +187,16 @@ function toggleSort(column) {
         <h2>{{ editingId ? 'Modificar cliente' : 'Nuevo cliente' }}</h2>
       </div>
       <div class="form-grid">
-        <label>Identificación<input v-model="form.identificacion" required maxlength="30" :pattern="fields.codigo.pattern" :title="fields.codigo.title" @input="form.identificacion = fields.codigo.clean($event.target.value)" /></label>
-        <label>Teléfono<input v-model="form.telefono" :maxlength="fields.telefono.maxlength" :pattern="fields.telefono.pattern" :title="fields.telefono.title" @input="form.telefono = fields.telefono.clean($event.target.value)" /></label>
+        <label>NIT (opcional, CF si se omite)<input v-model="form.nit" :maxlength="fields.nit.maxlength" :pattern="fields.nit.pattern" :title="fields.nit.title" placeholder="CF" @input="form.nit = fields.nit.clean($event.target.value)" /></label>
+        <label>Razón social (opcional)<input v-model.trim="form.razon_social" maxlength="160" /></label>
+        <label>Dirección fiscal (opcional)<input v-model.trim="form.direccion_fiscal" maxlength="255" /></label>
+        <label>DPI<input v-model="form.identificacion" required inputmode="numeric" :maxlength="fields.dpi.maxlength" :pattern="fields.dpi.pattern" :title="fields.dpi.title" placeholder="13 dígitos" @input="form.identificacion = fields.dpi.clean($event.target.value)" /></label>
+        <label>Teléfono<input v-model="form.telefono" required :maxlength="fields.telefono.maxlength" :pattern="fields.telefono.pattern" :title="fields.telefono.title" @input="form.telefono = fields.telefono.clean($event.target.value)" /></label>
         <label>Primer nombre<input v-model="form.primer_nombre" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.primer_nombre = fields.persona.clean($event.target.value)" /></label>
         <label>Segundo nombre<input v-model="form.segundo_nombre" maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.segundo_nombre = fields.persona.clean($event.target.value)" /></label>
         <label>Primer apellido<input v-model="form.primer_apellido" required maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.primer_apellido = fields.persona.clean($event.target.value)" /></label>
         <label>Segundo apellido<input v-model="form.segundo_apellido" maxlength="60" :pattern="fields.persona.pattern" :title="fields.persona.title" @input="form.segundo_apellido = fields.persona.clean($event.target.value)" /></label>
-        <label>Correo<input v-model="form.correo" type="email" :maxlength="fields.correo.maxlength" :pattern="fields.correo.pattern" :title="fields.correo.title" @input="form.correo = fields.correo.clean($event.target.value)" /></label>
+        <label>Correo<input v-model="form.correo" type="email" required :maxlength="fields.correo.maxlength" :pattern="fields.correo.pattern" :title="fields.correo.title" @input="form.correo = fields.correo.clean($event.target.value)" /></label>
       </div>
       <div class="actions">
         <button class="button primary" type="submit"><Save :size="16" /> {{ editingId ? 'Guardar cambios' : 'Crear cliente' }}</button>
@@ -203,9 +212,10 @@ function toggleSort(column) {
           <thead>
             <tr>
               <SortHeader label="ID" column="id" :sort="sort" :direction="direction" @sort="toggleSort" />
-              <SortHeader label="Identificación" column="identificacion" :sort="sort" :direction="direction" @sort="toggleSort" />
+              <SortHeader label="DPI" column="identificacion" :sort="sort" :direction="direction" @sort="toggleSort" />
               <SortHeader label="Nombre" column="nombre" :sort="sort" :direction="direction" @sort="toggleSort" />
               <th>Contacto</th>
+              <th>Datos fiscales</th>
               <SortHeader label="Estado" column="estado" :sort="sort" :direction="direction" @sort="toggleSort" />
               <th>Acción</th>
             </tr>
@@ -216,6 +226,11 @@ function toggleSort(column) {
               <td class="mono">{{ item.CLI_Identificacion }}</td>
               <td>{{ fullName(item) }}</td>
               <td>{{ item.CLI_Correo || item.CLI_Telefono || '—' }}</td>
+              <td>
+                <strong>{{ item.CLI_NIT || 'CF' }}</strong><br />
+                {{ item.CLI_Razon_Social || fullName(item) }}<br />
+                <small>{{ item.CLI_Direccion_Fiscal || 'Ciudad' }}</small>
+              </td>
               <td><span class="status" :class="{ off: !item.CLI_Estado }">{{ item.CLI_Estado ? 'Activo' : 'Inactivo' }}</span></td>
               <td class="actions">
                 <button v-if="auth.can('CLIENTES.GESTIONAR')" class="link" type="button" @click="edit(item)"><Pencil :size="14" /> Editar</button>

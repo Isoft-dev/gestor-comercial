@@ -138,6 +138,8 @@ return [
         'telefono' => 'teléfono',
         'identificacion_fiscal' => 'identificación fiscal',
         'razon_social' => 'razón social',
+        'nit' => 'NIT',
+        'direccion_fiscal' => 'dirección fiscal',
         'contacto' => 'contacto',
         'nombre' => 'nombre',
         'sku' => 'SKU',

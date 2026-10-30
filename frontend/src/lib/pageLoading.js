@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 
 export const pageLoading = ref(false)
+export const pendingMutations = ref(0)
 
 let token = 0
 let inflight = 0
@@ -29,6 +30,10 @@ export function settlePageLoading() {
 }
 
 export function trackPageRequest(config) {
+  if (!['get', 'head', 'options'].includes((config.method || 'get').toLowerCase())) {
+    pendingMutations.value += 1
+    config.trackedMutation = true
+  }
   if (!pageLoading.value) return config
   inflight += 1
   config.pageLoadToken = token
@@ -36,6 +41,10 @@ export function trackPageRequest(config) {
 }
 
 export function releasePageRequest(config) {
+  if (config?.trackedMutation) {
+    pendingMutations.value = Math.max(0, pendingMutations.value - 1)
+    config.trackedMutation = false
+  }
   if (!config || config.pageLoadToken !== token) return
   inflight = Math.max(0, inflight - 1)
   scheduleFinish()

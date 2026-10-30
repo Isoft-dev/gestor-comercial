@@ -93,10 +93,14 @@ class OrderController extends ApiController
         $this->requirePermission($request, 'PEDIDOS.REGISTRAR');
         $data = $request->validate([
             'cliente_id' => ['required', 'integer', 'exists:TEC_CLIENTE,CLI_Cliente'],
-            'descuento_porcentaje' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'descuento_porcentaje' => ['nullable', 'numeric', 'min:0', 'max:100', 'decimal:0,2'],
             'detalles' => ['required', 'array', 'min:1'],
             'detalles.*.producto_id' => ['required', 'integer', 'distinct', 'exists:TEC_PRODUCTO,PRO_Producto'],
             'detalles.*.cantidad' => ['required', 'integer', 'min:1'],
+        ], [
+            'descuento_porcentaje.max' => 'El descuento no puede ser mayor a 100 %.',
+            'descuento_porcentaje.min' => 'El descuento no puede ser negativo.',
+            'descuento_porcentaje.decimal' => 'El descuento admite como máximo 2 decimales.',
         ]);
 
         $lines = collect($data['detalles'])->map(function (array $detail) {
@@ -161,7 +165,6 @@ class OrderController extends ApiController
             'CREADO' => (float) $order->PED_Descuento_Porcentaje > self::DISCOUNT_LIMIT
                 ? 'PENDIENTE_APROBACION'
                 : 'APROBADO',
-            'APROBADO' => 'EN_PROCESO',
             default => null,
         };
         abort_unless($next, 409, 'El pedido no puede avanzar desde su estado actual.');
