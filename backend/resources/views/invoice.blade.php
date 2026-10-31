@@ -111,7 +111,11 @@
             <tr class="{{ $index % 2 ? 'alt' : '' }}">
                 <td class="center muted">{{ $index + 1 }}</td>
                 <td class="sku">{{ $line['PRO_SKU'] ?? '—' }}</td>
-                <td>{{ $line['PRO_Nombre'] }}</td>
+                <td>{{ $line['PRO_Nombre'] }}
+                    @if (($line['DPE_Descuento_Porcentaje'] ?? 0) > 0)
+                        <br><span class="muted">Descuento: {{ $line['DPE_Descuento_Porcentaje'] }}% (- {{ $money($line['DPE_Descuento_Monto']) }})</span>
+                    @endif
+                </td>
                 <td class="center">{{ $line['DPE_Cantidad'] }}</td>
                 <td class="num">{{ $money($line['DPE_Precio_Unitario']) }}</td>
                 <td class="num">{{ $money($line['DPE_Subtotal']) }}</td>
@@ -144,7 +148,7 @@
                 <table class="totals">
                     <tr><td class="muted">Subtotal</td><td class="num">{{ $money($data['subtotal']) }}</td></tr>
                     <tr>
-                        <td class="muted">Descuento ({{ rtrim(rtrim(number_format((float) $data['descuento_porcentaje'], 2), '0'), '.') }}%)</td>
+                        <td class="muted">Descuento {{ (float) $data['descuento_porcentaje'] > 0 ? 'general ('.rtrim(rtrim(number_format((float) $data['descuento_porcentaje'], 2), '0'), '.').'%)' : 'por producto' }}</td>
                         <td class="num">- {{ $money($data['descuento']) }}</td>
                     </tr>
                     <tr class="grand"><td>Total</td><td class="num">{{ $money($data['total']) }}</td></tr>

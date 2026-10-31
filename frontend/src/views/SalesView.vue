@@ -428,15 +428,17 @@ onMounted(load)
         <section class="sale-detail-block">
           <h3>Productos del pedido</h3>
           <div class="table-wrap"><table class="sale-lines-table">
-            <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th></tr></thead>
+            <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th>Descuento</th><th>Total</th></tr></thead>
             <tbody>
               <tr v-for="detail in selectedSale.detalles" :key="detail.DVE_Detalle_Venta">
                 <td><span class="mono">{{ detail.PRO_SKU }}</span> · {{ detail.PRO_Nombre }}</td>
                 <td>{{ detail.DVE_Cantidad }}</td>
                 <td class="mono">{{ formatCurrency(detail.DVE_Precio_Unitario) }}</td>
                 <td class="mono">{{ formatCurrency(detail.DVE_Subtotal) }}</td>
+                <td class="mono">{{ Number(detail.DVE_Descuento_Porcentaje) }} % · {{ formatCurrency(detail.DVE_Descuento_Monto) }}</td>
+                <td class="mono">{{ formatCurrency(Number(detail.DVE_Subtotal) - Number(detail.DVE_Descuento_Monto)) }}</td>
               </tr>
-              <tr v-if="!selectedSale.detalles?.length"><td colspan="4">No hay productos registrados.</td></tr>
+              <tr v-if="!selectedSale.detalles?.length"><td colspan="6">No hay productos registrados.</td></tr>
             </tbody>
           </table></div>
         </section>
@@ -445,7 +447,7 @@ onMounted(load)
             <h3>Importes</h3>
             <dl class="sale-amounts">
               <div><dt>Subtotal</dt><dd>{{ formatCurrency(selectedSale.PED_Subtotal) }}</dd></div>
-              <div><dt>Descuento ({{ Number(selectedSale.PED_Descuento_Porcentaje) }} %)</dt><dd>− {{ formatCurrency(selectedSale.PED_Descuento_Monto) }}</dd></div>
+              <div><dt>Descuento {{ Number(selectedSale.PED_Descuento_Porcentaje) > 0 ? `general (${Number(selectedSale.PED_Descuento_Porcentaje)} %)` : 'por producto' }}</dt><dd>− {{ formatCurrency(selectedSale.PED_Descuento_Monto) }}</dd></div>
               <div class="sale-total"><dt>Total</dt><dd>{{ formatCurrency(selectedSale.VEN_Total) }}</dd></div>
               <div><dt>Pagado</dt><dd>{{ formatCurrency(selectedSale.VEN_Pagado) }}</dd></div>
               <div><dt>Saldo pendiente</dt><dd>{{ formatCurrency(selectedSale.VEN_Saldo) }}</dd></div>

@@ -28,7 +28,25 @@ NIT, razón social y dirección fiscal son opcionales: si faltan, la factura usa
 `CF`, el nombre completo del cliente y "Ciudad", respectivamente.
 
 El pedido avanza una sola vez: de CREADO a APROBADO, o a
-PENDIENTE_APROBACION si el descuento supera 10 %. Después de la aprobación,
+PENDIENTE_APROBACION si algún descuento supera 10 %. Los descuentos del detalle
+se aplican exclusivamente a su producto, se redondean a centavos por línea y se
+aprueban individualmente. Los descuentos de hasta 10 % no necesitan supervisor.
+El descuento general es opcional y solo puede usarse si ningún producto tiene
+descuento; la API también impide combinar ambos tipos. Los pedidos existentes
+conservan su descuento general.
+
+Rechazar un descuento no cancela el pedido: el usuario que registra pedidos
+recibe una pregunta por cada descuento rechazado. Puede proponer otro porcentaje
+(si supera 10 %, vuelve a aprobación) o elegir **No** para conservar el producto
+a precio normal. Mientras haya aprobaciones o correcciones pendientes, no se
+puede vender. Las decisiones y los cambios quedan en el historial y la auditoría.
+La misma corrección aplica a un descuento general rechazado.
+
+El resumen de productos permanece desplegado en pedidos creados o pendientes de
+aprobación. Después de aprobar o vender, se consulta desde **Ver Detalle**, con
+descuentos por producto, estados y motivos de aprobación, importes e historial.
+
+Después de la aprobación,
 **Vender** finaliza la venta y descuenta inventario. Los pedidos antiguos
 EN_PROCESO aún pueden venderse. Los pagos parciales no facturan; el pago que
 deja el saldo en cero emite la factura en la misma transacción; el PDF se
@@ -38,13 +56,17 @@ Las ventas pagadas antes de esta actualización no reciben facturas retroactivas
 Los importes y datos fiscales emitidos no cambian si luego se edita al cliente
 o al producto. Esta facturación es interna, sin integración ni certificación FEL.
 
+Actualmente crear o aprobar un pedido **no reserva existencias**. La venta valida
+el stock con bloqueo transaccional y lo descuenta; si ya no alcanza, se rechaza
+sin cambios parciales. No se han agregado reservas en esta actualización.
+
 ### Validaciones de datos
 
 - DPI: exactamente 13 dígitos.
 - NIT: hasta 8 caracteres (dígitos y verificador final opcional `K`), o `CF` si se deja vacío.
 - Teléfono: 8 dígitos y debe iniciar con 2–7 (formato de Guatemala).
 - Tarjeta (demostración): 16 dígitos con verificación Luhn, vencimiento futuro y CVV.
-- Descuento del pedido: entre 0 % y 100 %, con hasta 2 decimales.
+- Descuento por producto o general (excluyentes): entre 0 % y 100 %, con hasta 2 decimales.
 - Pago: mayor a cero, hasta 2 decimales, y sin superar el saldo pendiente.
 
 Los clientes existentes que tengan teléfonos o DPI con el formato anterior deben

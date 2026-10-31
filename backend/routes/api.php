@@ -57,6 +57,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/pedidos', [OrderController::class, 'store']);
     Route::post('/pedidos/{id}/avanzar', [OrderController::class, 'advance']);
     Route::post('/pedidos/{id}/decidir', [OrderController::class, 'decide']);
+    Route::post('/pedidos/{id}/ajustar-descuento', [OrderController::class, 'adjustDiscount']);
     Route::post('/pedidos/{id}/cancelar', [OrderController::class, 'cancel']);
 
     Route::get('/ventas', [SaleController::class, 'index']);

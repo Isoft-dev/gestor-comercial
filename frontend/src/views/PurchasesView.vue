@@ -157,6 +157,14 @@ function closePurchaseDropdowns() {
   productDropdownOpen.value = false
 }
 
+function scheduleProviderClose() {
+  providerBlurTimeout = setTimeout(() => { providerDropdownOpen.value = false }, 150)
+}
+
+function scheduleProductClose() {
+  productBlurTimeout = setTimeout(() => { productDropdownOpen.value = false }, 150)
+}
+
 function closePurchaseDropdownsOnPointerDown(event) {
   if (event.target instanceof Element && event.target.closest('.order-picker')) return
   closePurchaseDropdowns()
@@ -213,7 +221,9 @@ function addPurchaseProduct() {
     cantidad: quantity,
     costo_unitario: unitCost,
   })
-  clearProduct()
+  productQuery.value = ''
+  form.producto_id = ''
+  closePurchaseDropdowns()
   form.cantidad = 1
   form.costo_unitario = ''
 }
@@ -471,7 +481,7 @@ onBeforeUnmount(() => {
             :aria-expanded="providerDropdownOpen"
             @input="updateProviderQuery($event.target.value)"
             @focus="openProviderOptions"
-            @blur="providerBlurTimeout = setTimeout(() => { providerDropdownOpen = false }, 150)"
+            @blur="scheduleProviderClose"
             @keydown.escape="providerDropdownOpen = false"
           />
           <button
@@ -520,7 +530,7 @@ onBeforeUnmount(() => {
                 :aria-expanded="productDropdownOpen"
                 @input="updateProductQuery($event.target.value)"
                 @focus="openProductOptions"
-                @blur="productBlurTimeout = setTimeout(() => { productDropdownOpen = false }, 150)"
+                @blur="scheduleProductClose"
                 @keydown.escape="productDropdownOpen = false"
               />
               <button

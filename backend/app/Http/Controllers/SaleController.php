@@ -172,6 +172,8 @@ class SaleController extends ApiController
                     'DVE_Cantidad' => $detail->DPE_Cantidad,
                     'DVE_Precio_Unitario' => $detail->DPE_Precio_Unitario,
                     'DVE_Subtotal' => $detail->DPE_Subtotal,
+                    'DVE_Descuento_Porcentaje' => $detail->DPE_Descuento_Porcentaje,
+                    'DVE_Descuento_Monto' => $detail->DPE_Descuento_Monto,
                 ]);
                 DB::table('TEC_MOVIMIENTO_INVENTARIO')->insert([
                     'PRO_Producto' => $detail->PRO_Producto,
@@ -283,7 +285,7 @@ class SaleController extends ApiController
             ->join('TEC_PRODUCTO as p', 'p.PRO_Producto', '=', 'd.PRO_Producto')
             ->where('d.PED_Pedido', $order->PED_Pedido)
             ->orderBy('p.PRO_Nombre')
-            ->get(['p.PRO_SKU', 'p.PRO_Nombre', 'd.DPE_Cantidad', 'd.DPE_Precio_Unitario', 'd.DPE_Subtotal']);
+            ->get(['p.PRO_SKU', 'p.PRO_Nombre', 'd.DPE_Cantidad', 'd.DPE_Precio_Unitario', 'd.DPE_Subtotal', 'd.DPE_Descuento_Porcentaje', 'd.DPE_Descuento_Monto']);
 
         return DB::table('TEC_FACTURA')->insertGetId([
             'VEN_Venta' => $sale->VEN_Venta,
